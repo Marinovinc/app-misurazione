@@ -142,3 +142,34 @@ def transizione_certificata_a_stima(conferma: ConfermaUtente) -> ModalitaStima:
     il parametro non e' opzionale, quindi la transizione non e' mai automatica."""
     _ = conferma
     return ModalitaStima()
+
+
+MOTIVO_CONDIZIONI_NON_PIENE = (
+    "condizioni della modalita' certificata non piene: misurare in stima "
+    "richiede un'azione esplicita dell'utente, non avviene in automatico"
+)
+
+
+def degrada_a_stima(
+    misura: GrandezzaIncerta,
+    provenienza: Provenienza,
+    tolleranza: Tolleranza,
+    conferma: ConfermaUtente | None,
+) -> EsitoMisura:
+    """Misura in stima quando la certificata era possibile ma non e' disponibile.
+
+    Generalizza `gestisci_riferimento_occluso` al caso in cui a mancare non e' il
+    riferimento ma una delle altre condizioni (il secondo riferimento di §5.3).
+    La forma della regola e' la stessa e per la stessa ragione: **il degrado non
+    e' un ripiego automatico**. Senza conferma non esce un numero, esce un
+    rifiuto — perche' un numero in stima presentato dove l'utente si aspettava
+    una certificata e' esattamente il fraintendimento che §4.1 chiama il rischio
+    principale.
+
+    `conferma` e' opzionale nella firma proprio per poter rappresentare la sua
+    assenza; il degrado, pero', passa comunque dall'unica via che esiste.
+    """
+    if conferma is None:
+        return RifiutoMotivato(MOTIVO_CONDIZIONI_NON_PIENE)
+    transizione_certificata_a_stima(conferma)
+    return valuta(misura, provenienza, tolleranza)

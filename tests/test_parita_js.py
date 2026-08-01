@@ -100,7 +100,29 @@ const discordi = core.confrontaScale(
   core.GrandezzaIncerta.daDeviazione(0.34, 0.002));
 const chiavi_discordi = Object.keys(discordi);
 
-process.stdout.write(JSON.stringify({singoli, doppi, chiavi_discordi}));
+// degrado: senza conferma non esce un numero; con conferma esce lo stesso
+// numero della misura non degradata (il degrado cambia il permesso, non i conti)
+const optsDeg = {
+  tipo:'id1_lungo', latoRifPx:300, sigmaRifPx:2.5,
+  latoTargetPx:850, sigmaSegPx:1.0, tolleranzaMm:20.0,
+};
+const senza = core.misuraDegradataAStima(optsDeg, null);
+const con = core.misuraDegradataAStima(optsDeg, core.ConfermaUtente('motivo'));
+const diretta = core.misuraManuale(optsDeg);
+const degrado = {
+  senza_tipo: senza.tipo,
+  senza_motivo: senza.motivo,
+  senza_ha_valore: 'valore_mm' in senza,
+  con_tipo: con.tipo,
+  con_valore: con.valore_mm,
+  con_modalita: con.modalita,
+  con_degradata_da: con.degradata_da,
+  diretta_valore: diretta.valore_mm,
+  diretta_incertezza: diretta.incertezza_espansa_mm,
+  con_incertezza: con.incertezza_espansa_mm,
+};
+
+process.stdout.write(JSON.stringify({singoli, doppi, chiavi_discordi, degrado}));
 """
 
 # Casi condivisi dai due core. Coprono i tre tipi di riferimento manuale, un
@@ -351,6 +373,25 @@ def test_discordi_non_espone_scala_anche_in_js(tmp_path: Path) -> None:
     chiavi = _esegui_js(tmp_path)["chiavi_discordi"]
     assert "scala" not in chiavi
     assert "motivo" in chiavi
+
+
+def test_parita_degrado_esplicito(tmp_path: Path) -> None:
+    """La regola di §4.1 dev'essere la stessa nei due core: senza conferma non
+    esce un numero, con conferma esce **lo stesso** numero — il degrado cambia
+    il permesso di mostrare la misura, non i conti che la producono."""
+    from misura.esito import MOTIVO_CONDIZIONI_NON_PIENE
+
+    d = _esegui_js(tmp_path)["degrado"]
+
+    assert d["senza_tipo"] == "RifiutoMotivato"
+    assert d["senza_ha_valore"] is False
+    assert d["senza_motivo"] == MOTIVO_CONDIZIONI_NON_PIENE
+
+    assert d["con_tipo"] in ("EntroTolleranza", "FuoriTolleranza")
+    assert d["con_modalita"] == "stima"
+    assert d["con_degradata_da"] == "certificata"
+    assert d["con_valore"] == pytest.approx(d["diretta_valore"], rel=1e-12)
+    assert d["con_incertezza"] == pytest.approx(d["diretta_incertezza"], rel=1e-12)
 
 
 def test_js_di_pagina_sintatticamente_valido(tmp_path: Path) -> None:
