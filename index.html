@@ -464,6 +464,9 @@ function azzeraPunti(){
 function aggiornaBottone(){
   const rifPronti = state.rifA.length===2 && (!state.doppio || state.rifB.length===2);
   btn.disabled = !(state.dataUrl && rifPronti && state.punti.length===2);
+  // il bottone dice cosa sta per succedere: dove la certificata era possibile e
+  // non lo e' piu', non produce un numero ma l'offerta esplicita di degrado
+  btn.textContent = richiedeDegrado() ? 'Prosegui in stima…' : 'Misura';
   reset.hidden = !(state.rifA.length || state.rifB.length || state.punti.length);
 }
 
@@ -557,8 +560,61 @@ function aggiornaModo(esito){
 // nessun server. L'immagine non lascia il dispositivo perche' non va da nessuna
 // parte — non perche' qualcuno promette di non guardarla.
 const lungPx=(a,b)=>Math.hypot(b[0]-a[0],b[1]-a[1]);
+
+function optsSingolo(){
+  return { tipo:$('#tipoA').value, latoPersonalizzato:parseFloat($('#latoA').value),
+    latoRifPx:lungPx(...state.rifA), latoTargetPx:lungPx(...state.punti),
+    sigmaSegPx:parseFloat($('#sigmaseg').value), tolleranzaMm:parseFloat($('#tolreq').value) };
+}
+
+// Il degrado esiste solo dove c'e' qualcosa da cui degradare. Con un'immagine
+// d'archivio la stima e' la modalita' NATIVA (§4.1) e chiedere conferma sarebbe
+// un avviso mostrato sempre — cioe' un avviso ignorato sempre (§4.3).
+function richiedeDegrado(){
+  return state.origine==='scatto' && !state.doppio;
+}
+
+// Offerta esplicita di degrado: mostra l'incertezza della stima **calcolata
+// davvero** su questa configurazione, non una penalita' forfettaria, e non
+// consegna nessun valore finche' l'utente non ha accettato.
+function mostraOffertaDegrado(){
+  const opts=optsSingolo();
+  let prova;
+  try{ prova=window.MisuraCore.misuraManuale(opts); }
+  catch(e){ err.hidden=false; err.textContent=e.message||String(e); return; }
+
+  const box=$('#esito');
+  box.innerHTML=`<div class="card warn no-number">
+    <div class="card-head"><span class="pill warn"><span class="dot"></span>Condizioni non piene</span><span class="chip cert">Certificata</span></div>
+    <div class="refusal">La modalità certificata non è disponibile: manca il secondo riferimento.</div>
+    <p class="whisper">Hai scattato in-app, ma con un solo riferimento non c'è nulla da confrontare: la verifica delle due scale non può essere fatta, e senza quella la misura è una stima.</p>
+    <div class="meta">
+      <div><div class="k">Incertezza se accetti la stima</div><div class="v">± ${prova.incertezza_espansa_mm.toFixed(1)} mm (k=2)</div></div>
+      <div><div class="k">Tolleranza richiesta</div><div class="v">± ${prova.tolleranza_mm.toFixed(1)} mm</div></div>
+      <div><div class="k">Esito che ne uscirebbe</div><div class="v">${prova.tipo==='EntroTolleranza'?'entro tolleranza':'fuori tolleranza'}</div></div>
+    </div>
+    <div class="cam-actions">
+      <button class="go" id="accettaStima">Accetta la stima e misura</button>
+      <button class="ghost" id="completaVerifica">Aggiungi il secondo riferimento</button>
+    </div></div>`;
+
+  $('#accettaStima').addEventListener('click',()=>{
+    const conferma=window.MisuraCore.ConfermaUtente(
+      'secondo riferimento assente: l\'utente ha accettato la stima al posto della certificata');
+    const esito=window.MisuraCore.misuraDegradataAStima(opts, conferma);
+    renderEsito(esito); aggiornaModo(esito);
+  });
+  $('#completaVerifica').addEventListener('click',()=>{
+    chkDoppio.checked=true;
+    chkDoppio.dispatchEvent(new Event('change'));
+    box.innerHTML='';
+  });
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
 btn.addEventListener('click',()=>{
   err.hidden=true;
+  if(richiedeDegrado()){ mostraOffertaDegrado(); return; }
   const tolleranzaMm=parseFloat($('#tolreq').value);
   const sigmaSegPx=parseFloat($('#sigmaseg').value);
   let esito;
@@ -613,6 +669,10 @@ function renderEsito(d){
     // distingue una scala verificata da una semplicemente dichiarata
     if(d.verifica_doppio_riferimento==='superata')
       h+=`<div><div class="k">Doppio riferimento</div><div class="v">verificato · ${d.divergenza_mm_px} ≤ ${d.soglia_mm_px} mm/px</div></div>`;
+    // la transizione di modalita' viaggia col dato, come l'incertezza (§4.3):
+    // sopravvive allo screenshot e al copia-incolla
+    if(d.degradata_da)
+      h+=`<div><div class="k">Transizione di modalità</div><div class="v">da certificata a stima, su conferma esplicita</div></div>`;
     h+=`</div></div>`;
   }
   box.innerHTML=h; box.scrollIntoView({behavior:'smooth',block:'nearest'});

@@ -160,6 +160,45 @@ function misuraManuale(opts) {
   return esito;
 }
 
+// --- transizione fra modalita': mai automatica (§4.1) -------------------------
+// Gemello di `ConfermaUtente` e `degrada_a_stima` del core Python. Il token va
+// costruito deliberatamente dal chiamante: senza, non si degrada, si rifiuta.
+// Un numero in stima consegnato dove l'utente si aspettava una certificata e'
+// il fraintendimento che §4.1 chiama il rischio principale.
+const MOTIVO_CONDIZIONI_NON_PIENE =
+  "condizioni della modalita' certificata non piene: misurare in stima "
+  + "richiede un'azione esplicita dell'utente, non avviene in automatico";
+
+function ConfermaUtente(motivazione) {
+  if (!motivazione) throw new Error('la conferma richiede una motivazione esplicita');
+  return { conferma: true, motivazione };
+}
+
+function transizioneCertificataAStima(conferma) {
+  if (!conferma || conferma.conferma !== true) {
+    throw new Error('transizione di modalita\' senza conferma esplicita');
+  }
+  return 'stima';
+}
+
+// Misura in stima quando la certificata era possibile ma non e' disponibile.
+// L'incertezza che ne esce e' quella **calcolata** sul riferimento che c'e',
+// non una penalita' forfettaria: e' il numero vero di quella configurazione.
+function misuraDegradataAStima(opts, conferma) {
+  if (!conferma) {
+    return {
+      tipo: 'RifiutoMotivato',
+      motivo: MOTIVO_CONDIZIONI_NON_PIENE,
+      provenienza: "Misurata dall'app",
+    };
+  }
+  const esito = misuraManuale(opts);
+  esito.modalita = transizioneCertificataAStima(conferma);
+  esito.degradata_da = 'certificata';
+  esito.motivazione_degrado = conferma.motivazione;
+  return esito;
+}
+
 // misura con DUE riferimenti: la scala passa prima dalla verifica di §5.3.
 // Se i due riferimenti non concordano non esce un numero, esce un rifiuto.
 function misuraDoppioRiferimento(opts) {
@@ -197,4 +236,5 @@ function misuraDoppioRiferimento(opts) {
 window.MisuraCore = {
   GrandezzaIncerta, scalaDaLatoPixel, misuraDaScala, valuta, misuraManuale,
   confrontaScale, misuraDoppioRiferimento, COPERTURA_COMPATIBILITA_K,
+  ConfermaUtente, misuraDegradataAStima, MOTIVO_CONDIZIONI_NON_PIENE,
 };
