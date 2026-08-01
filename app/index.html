@@ -47,6 +47,14 @@
   .badge.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent);}
   .placeholder{background:var(--surface);border:1px dashed var(--line-strong);border-radius:14px;padding:28px 22px;color:var(--muted);}
   .placeholder h2{margin:0 0 8px;color:var(--ink);font-size:19px;}
+  .guida{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:0 18px;margin-bottom:20px;box-shadow:var(--shadow);}
+  .guida>summary{cursor:pointer;padding:14px 0;font-weight:640;font-size:15px;list-style:none;display:flex;align-items:center;gap:9px;}
+  .guida>summary::-webkit-details-marker{display:none;}
+  .guida>summary::before{content:"›";color:var(--accent);font-size:20px;line-height:1;transition:transform .2s;}
+  .guida[open]>summary::before{transform:rotate(90deg);}
+  .guida ol{margin:0 0 4px;padding-left:22px;display:flex;flex-direction:column;gap:9px;color:var(--ink);font-size:13.8px;}
+  .guida li{line-height:1.5;}
+  .guida-tip{margin:12px 0 16px;padding:11px 13px;background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 26%,transparent);border-radius:8px;font-size:13px;line-height:1.5;color:var(--ink);}
   .brand{font-family:var(--mono);font-weight:600;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);}
   h1{font-size:clamp(21px,3.4vw,27px);margin:4px 0 0;font-weight:640;letter-spacing:-.01em;}
   .sub{color:var(--muted);font-size:14px;margin:6px 0 0;max-width:66ch;}
@@ -59,22 +67,27 @@
   .panel-b{padding:16px;}
 
   /* dropzone + image */
-  .drop{border:1.5px dashed var(--line-strong);border-radius:10px;background:var(--surface-2);padding:26px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;}
+  .drop{display:flex;flex-direction:column;align-items:center;gap:5px;width:100%;border:1.5px dashed var(--line-strong);border-radius:10px;background:var(--surface-2);padding:clamp(18px,5vw,28px) 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;}
   .drop:hover,.drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--surface-2));}
-  .drop p{margin:6px 0 0;color:var(--muted);font-size:13.5px;}
-  .drop .big{color:var(--ink);font-weight:600;font-size:15px;}
+  .drop p{margin:0;color:var(--muted);font-size:clamp(12.5px,3.2vw,13.5px);max-width:40ch;text-wrap:balance;}
+  .drop .big{color:var(--ink);font-weight:600;font-size:clamp(14px,3.6vw,15px);text-wrap:balance;}
   input[type=file]{display:none;}
   .orbtn{margin-top:10px;text-align:center;}
   .cam[hidden]{display:none;}
   .cam{margin-top:12px;}
-  .cam video{width:100%;border-radius:10px;border:1px solid var(--line);background:#000;display:block;}
-  .cam-actions{display:flex;gap:10px;margin-top:10px;}
-  .cam-actions .go{margin-top:0;}
+  .camwrap{position:relative;line-height:0;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#000;}
+  .camwrap video{width:100%;height:auto;display:block;}
+  .camguide{position:absolute;top:50%;left:50%;width:min(62%,220px);aspect-ratio:1;transform:translate(-50%,-50%);border:2px dashed rgba(255,255,255,.9);border-radius:10px;pointer-events:none;}
+  .camhint{font-size:12.5px;color:var(--muted);margin:8px 0 0;text-align:center;text-wrap:balance;}
+  .cam-actions{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;}
+  .cam-actions .go{margin-top:0;flex:1;min-width:140px;}
+  @media(max-width:430px){.row{grid-template-columns:1fr;}}
 
-  .stage{position:relative;display:none;margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid var(--line);line-height:0;}
+  .stage{display:none;margin-top:14px;text-align:center;}
   .stage.show{display:block;}
-  .stage img{display:block;width:100%;height:auto;}
-  .stage svg{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;}
+  .imgwrap{position:relative;display:inline-block;line-height:0;max-width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--line);}
+  .imgwrap img{display:block;max-width:100%;max-height:min(58vh,520px);width:auto;height:auto;}
+  .imgwrap svg{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;}
   .hint{font-size:12.5px;color:var(--muted);margin:10px 2px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .tag{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid var(--line);background:var(--surface-2);color:var(--accent-ink);}
 
@@ -160,6 +173,18 @@
     <p class="sub">Carica una foto con un marker ArUco visibile e complanare all'oggetto, poi clicca i due estremi del target. Il calcolo gira sul nucleo metrologico reale: valore, incertezza, provenienza ed esito.</p>
   </header>
 
+  <details class="guida" open>
+    <summary>Come si usa — guida rapida</summary>
+    <ol>
+      <li><b>Ti serve un marker ArUco (4×4)</b> nella foto, accanto all'oggetto e sullo <b>stesso piano</b>. È il metro di riferimento: senza, l'app non può conoscere la scala.</li>
+      <li><b>Scatta o carica</b> una foto — fotocamera, scegli un file, o trascina l'immagine.</li>
+      <li><b>Clicca i due estremi</b> di ciò che vuoi misurare, direttamente sull'immagine.</li>
+      <li><b>Indica la dimensione reale</b> del marker (il lato in mm) e premi <b>Misura</b>.</li>
+      <li>Leggi il risultato: <b>valore ± incertezza</b> e l'esito — entro tolleranza, fuori tolleranza, oppure non misurabile.</li>
+    </ol>
+    <p class="guida-tip"><b>Non rileva il marker?</b> Riprova con il marker più grande nel fotogramma, ben illuminato, senza riflessi e tutto visibile. Su uno schermo di telefono è difficile (riflessi, moiré): meglio <b>stamparlo</b>.</p>
+  </details>
+
   <div class="grid">
     <!-- colonna immagine -->
     <section class="panel">
@@ -172,15 +197,15 @@
         </label>
         <div class="orbtn"><button class="ghost" id="camBtn">📷 Scatta da webcam</button></div>
         <div class="cam" id="cam" hidden>
-          <video id="video" autoplay playsinline muted></video>
+          <div class="camwrap"><video id="video" autoplay playsinline muted></video><div class="camguide"></div></div>
+          <p class="camhint">Porta il marker dentro il riquadro e riempilo il più possibile</p>
           <div class="cam-actions">
             <button class="go" id="capture">Cattura fotogramma</button>
             <button class="ghost" id="camClose">annulla</button>
           </div>
         </div>
         <div class="stage" id="stage">
-          <img id="img" alt="immagine caricata">
-          <svg id="ov" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="imgwrap"><img id="img" alt="immagine caricata"><svg id="ov" preserveAspectRatio="xMidYMid meet"></svg></div>
         </div>
         <div class="hint" id="hint" hidden></div>
       </div>
@@ -286,7 +311,9 @@ img.addEventListener('load',async()=>{
       const dim=d.larghezza?` · immagine ${d.larghezza}×${d.altezza}px`:'';
       setHint('⚠ '+(d.errore||'riferimento non trovato')+dim, 'avvicina il marker, riempi il fotogramma, buona luce'); return; }
     state.id=d.id; disegnaMarker(d.angoli);
-    setHint(`riferimento rilevato · lato ${d.lato_px}px`, `clicca i 2 estremi del target`);
+    const frazione = d.lato_px / Math.min(d.larghezza, d.altezza);
+    if(frazione < 0.15) setHint(`⚠ riferimento piccolo (lato ${d.lato_px}px): avvicinalo per più precisione`, `clicca i 2 estremi del target`);
+    else setHint(`riferimento rilevato · lato ${d.lato_px}px`, `clicca i 2 estremi del target`);
     aggiornaBottone();
   }catch(e){ setHint('⚠ errore di rete'); }
 });
