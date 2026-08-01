@@ -66,7 +66,8 @@ function misuraDaScala(scala, lunghezzaPx, sigmaPx) {
 
 // --- esito a tre: entro / fuori tolleranza (il rifiuto nasce a monte) ----------
 function valuta(misura, semiampiezzaMm, coperturaK) {
-  const k = coperturaK || 2.0;
+  // `??` e non `||`: uno zero dichiarato e' un valore, non un campo mancante.
+  const k = coperturaK ?? 2.0;
   const espansa = k * misura.deviazione;
   const entro = espansa <= semiampiezzaMm;
   return {
@@ -90,8 +91,11 @@ function riferimentoManuale(tipo, latoPersonalizzato) {
 // misura completa a clic manuale, tutta lato client
 function misuraManuale(opts) {
   const rif = riferimentoManuale(opts.tipo, opts.latoPersonalizzato);
-  const scala = scalaDaLatoPixel(rif.latoMm, rif.tolleranzaMm, opts.latoRifPx, opts.sigmaRifPx || 2.5);
-  const misura = misuraDaScala(scala, opts.latoTargetPx, opts.sigmaSegPx || 1.0);
+  // `??` e non `||`: con `||` una sigma dichiarata a 0 (falsy) veniva sostituita
+  // dal default, gonfiando l'incertezza di un fattore 12 senza dirlo. Il core
+  // Python rispetta lo zero; qui deve farlo anche il JS.
+  const scala = scalaDaLatoPixel(rif.latoMm, rif.tolleranzaMm, opts.latoRifPx, opts.sigmaRifPx ?? 2.5);
+  const misura = misuraDaScala(scala, opts.latoTargetPx, opts.sigmaSegPx ?? 1.0);
   const esito = valuta(misura, opts.tolleranzaMm, 2.0);
   esito.scala_mm_px = scala.valore.toFixed(4);
   esito.scala_inc_mm_px = scala.deviazione.toFixed(4);
