@@ -29,6 +29,9 @@ prima classe**. Il numero non esiste mai da solo. Spec: `concept-app-misurazione
 - Progetto in `C:\Users\marin\Progetti\app-misurazione` (git repo). Python venv in `.venv`.
 - **Gate (deve restare verde):**
   `.venv\Scripts\python -m mypy` (strict, pulito) e `.venv\Scripts\python -m pytest`.
+  Il gate copre anche il JS: `tests/test_parita_js.py` esegue `app/core.js` con
+  **node** e confronta i numeri col core Python, controlla la sintassi del JS
+  inline di `index.html` e verifica che né la pagina né il core facciano rete.
 - **Core Python** `src/misura/` — fonte di verità (fase 0). **Banco:** `.venv\Scripts\python -m misura.validazione.banco`.
 - **App locale** `.venv\Scripts\python app\server.py` → http://localhost:5000 (Flask, dev; ArUco via opencv).
 - **Core JS client-only** `app/core.js` — port del percorso manuale; **deve coincidere numericamente col core Python**.
@@ -46,12 +49,19 @@ prima classe**. Il numero non esiste mai da solo. Spec: `concept-app-misurazione
 - **Fase 0: COMPLETA** — nucleo verde, `docs/report-fase0.md`, `docs/piano-fase0.md`.
 - **Dataset ground-truth**: struttura in `dataset/`, protocollo `docs/protocollo-validazione.md`
   (JSON in git, **niente database**; il DB è riservato al ciclo di apprendimento §9.4).
-- **Fase 1a** (piano approvato `docs/piano-fase1a.md`): **fatti** — passo 1 (guscio SPA
-  + router + PWA), riferimento a **clic manuale** (carta ID-1 85,60 mm / righello),
-  **core JS client-only**. **Da fare** — passo 2 (acquisizione fotocamera/galleria →
-  modalità certificata/stima), passo 3 (regola di degrado esplicita), passo 4
-  (**manichino Three.js** stilizzato neutro fisso, input manuale), passi 5–6
-  (modello misura con provenienza/incertezza, distinzione visiva misurato/manuale/interpolato).
+- **Fase 1a** (piano `docs/piano-fase1a.md`, con la **revisione del 1 ago 2026** in
+  testa al file): **fatti** — passo 0 (parità core.js↔Python nel gate), passo 1
+  (guscio SPA + router + PWA), passo 2 (**acquisizione a due porte**: la modalità
+  è derivata dalle condizioni, non scelta; **doppio riferimento** §5.3 in Python e
+  JS), passo 3 (**degrado esplicito** `degrada_a_stima`). **Da fare** — passo 4
+  (**manichino Three.js**: tre varianti da creare noi, uomo/donna/bambino),
+  passi 5–6 (modello misura con provenienza/incertezza, distinzione visiva
+  misurato/manuale/interpolato).
+- **«Certificata» nell'app a clic** = acquisizione live catturata dall'app + due
+  riferimenti su oggetti distinti + scale concordi. **Non promette l'1%** (§3.3
+  richiede anche cattura guidata e calibrazione per dispositivo). L'app è
+  **interamente client-only**; ArUco è fuori dalla UI, resta strumento di
+  validazione lato server.
 
 ## Pubblicazione (modello famiglia)
 

@@ -35,6 +35,25 @@ decisa: costruire il cloud significherebbe deciderla senza deciderla).
   pezzo nativo). Punto debole del web = on-device del rilevamento (Pyodide-opencv
   incerto, uscita: ArUco in JS). Fase successiva.
 
+## Revisione del 1 agosto 2026 (decisioni prese in corso d'opera)
+
+Tre scelte scostano da quanto scritto sotto, e prevalgono:
+
+1. **"Certificata" ridefinita sul doppio riferimento.** Le quattro condizioni di
+   §3.3 per l'1% (planare, riferimento complanare, cattura guidata, profilo di
+   calibrazione per dispositivo) non sono soddisfacibili col clic manuale: gia'
+   il solo riferimento, cliccato a mano su ~300 px, porta un errore relativo
+   dello 0,8%. Nell'app a clic **certificata significa: acquisizione live
+   catturata dall'app + due riferimenti su oggetti distinti + scale concordi**,
+   e la UI dichiara esplicitamente che **non promette l'1%**.
+   `ModalitaCertificata.tolleranza_relativa_obiettivo` resta invariata nel core:
+   e' un attributo del dominio, non un'affermazione dell'interfaccia.
+2. **ArUco fuori dall'interfaccia.** L'app e' interamente client-only, cosi'
+   com'e' pubblicabile. Gli endpoint `/api/analizza` e `/api/misura` restano
+   come strumento di sviluppo e validazione, con i loro test.
+3. **Doppio riferimento anticipato** ai passi 2-3, perche' e' la condizione che
+   rende possibile la certificata ridefinita.
+
 ## Le quattro schermate
 
 1. **Scelta compito** — due voci oneste: *Misura oggetto planare* (usa il core) e
@@ -72,10 +91,22 @@ Il core ricava la scala **solo** dal riferimento (niente IMU/depth). Quindi:
 
 ## Passi (un commit ciascuno; gate del core invariato)
 
-1. **Guscio SPA + router + PWA** (manifest, service worker offline).
-2. **Screen 1–2–3** sul percorso oggetto, riusando il core.
-3. **Regola di degrado esplicita** (l'incertezza-stima calcolata quando un riferimento c'e').
+0. **[fatto]** **Parita' `core.js` <-> core Python nel gate** (`tests/test_parita_js.py`,
+   node esegue il core JS sugli stessi ingressi). Ha subito trovato una
+   divergenza: `|| 2.5` al posto di `?? 2.5` sostituiva una sigma dichiarata a
+   zero col default, gonfiando l'incertezza di un fattore 12.
+1. **[fatto]** **Guscio SPA + router + PWA** (manifest, service worker offline).
+2. **[fatto]** **Screen 1–2–3** sul percorso oggetto, con **acquisizione a due
+   porte**: la modalita' non e' piu' una voce che l'utente sceglie, e' derivata
+   dalle condizioni e dichiarata prima di misurare. Include il **doppio
+   riferimento** (§5.3) nel core Python e nel port JS.
+3. **[fatto]** **Regola di degrado esplicita** (`degrada_a_stima`): l'incertezza
+   della stima calcolata davvero, e nessun valore prima della conferma.
 4. **Manichino Three.js** neutro + linee posizionabili + interazione bidirezionale.
+   Tre varianti da creare **noi** (uomo, donna, bambino); riferimento visivo
+   indicato: `app.pickandpose.com`, piu' stilizzato. Posa articolabile ammessa
+   (e' visualizzazione); morfologia morfata sui dati dell'utente **no**, e la
+   geometria non emette valori.
 5. **Modello misura** con provenienza/incertezza, input manuale §9.2, correzione, stati vuoti.
 6. **Distinzione visiva** misurato/manuale/interpolato + badge provenienza.
 
