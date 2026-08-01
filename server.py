@@ -105,6 +105,15 @@ def icona() -> Any:
     return send_file(_ICON, mimetype="image/png")
 
 
+@app.get("/esempi/<path:nome>")
+def esempi(nome: str) -> Any:
+    # dev: serve le immagini di esempio (marker, campione) per provare in-app
+    percorso = (_QUI.parent / "esempi" / nome).resolve()
+    if percorso.parent != (_QUI.parent / "esempi").resolve() or not percorso.is_file():
+        return jsonify({"errore": "non trovato"}), 404
+    return send_file(percorso)
+
+
 @app.post("/api/analizza")
 def analizza() -> Any:
     corpo = request.get_json(force=True)
@@ -112,10 +121,20 @@ def analizza() -> Any:
         immagine = _decodifica(corpo["immagine"])
     except (KeyError, ValueError) as errore:
         return jsonify({"errore": str(errore)}), 400
+    altezza0, larghezza0 = immagine.shape[:2]
     try:
         angoli = rileva_marker(immagine)
     except RiferimentoNonTrovato as errore:
-        return jsonify({"errore": str(errore)}), 422
+        return (
+            jsonify(
+                {
+                    "errore": str(errore),
+                    "larghezza": int(larghezza0),
+                    "altezza": int(altezza0),
+                }
+            ),
+            422,
+        )
     id_immagine = hashlib.sha1(corpo["immagine"].encode()).hexdigest()[:16]
     _ANALISI[id_immagine] = {
         "angoli": angoli,

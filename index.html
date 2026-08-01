@@ -282,7 +282,9 @@ img.addEventListener('load',async()=>{
   try{
     const res=await fetch('/api/analizza',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({immagine:state.dataUrl})});
     const d=await res.json();
-    if(!res.ok){ state.id=null; setHint('⚠ '+(d.errore||'riferimento non trovato')); disegnaMarker(null); btn.disabled=true; return; }
+    if(!res.ok){ state.id=null; disegnaMarker(null); btn.disabled=true;
+      const dim=d.larghezza?` · immagine ${d.larghezza}×${d.altezza}px`:'';
+      setHint('⚠ '+(d.errore||'riferimento non trovato')+dim, 'avvicina il marker, riempi il fotogramma, buona luce'); return; }
     state.id=d.id; disegnaMarker(d.angoli);
     setHint(`riferimento rilevato · lato ${d.lato_px}px`, `clicca i 2 estremi del target`);
     aggiornaBottone();
