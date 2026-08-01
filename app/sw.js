@@ -1,7 +1,7 @@
 // Service worker: cache locale per l'offline. Nessuna rete a runtime oltre al
 // Flask locale; le POST /api NON vengono mai messe in cache (dati, non asset).
-const CACHE = 'misura-v2';
-const ASSET = ['/', '/manifest.webmanifest', '/icon-512.png'];
+const CACHE = 'misura-v3';
+const ASSET = ['/', '/core.js', '/manifest.webmanifest', '/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSET)).then(() => self.skipWaiting()));

@@ -6,6 +6,7 @@
 <title>app-misurazione · misura interattiva</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#0b7f93">
+<script src="core.js"></script>
 <style>
   :root {
     --bg:#eef1f2; --surface:#fff; --surface-2:#f6f8f9; --ink:#0f171c; --muted:#5c6b72;
@@ -409,19 +410,28 @@ function setHint(a,b){ hint.hidden=false; hint.innerHTML = a + (b?` <span class=
 btn.addEventListener('click',async()=>{
   err.hidden=true; btn.disabled=true; btn.textContent='calcolo…';
   const tipo=$('#tipo').value;
-  const corpo={ punti:state.punti,
-    modalita:document.querySelector('input[name=mod]:checked').value,
-    tolleranza_mm:parseFloat($('#tolreq').value), sigma_seg_px:parseFloat($('#sigmaseg').value) };
+  const modalita=document.querySelector('input[name=mod]:checked').value;
+
+  // percorso a clic manuale: calcolo CLIENT-ONLY, nessun server
   if(state.modoRif==='manuale'){
-    corpo.riferimento_punti=state.puntiRif;
-    corpo.riferimento={tipo};
-    if(tipo==='personalizzato') corpo.riferimento.lato_mm=parseFloat($('#lato').value);
-  } else {
-    corpo.id=state.id;
-    corpo.riferimento={tipo, lato_mm:parseFloat($('#lato').value)};
-    if(tipo==='non_verificato') corpo.riferimento.frazione=parseFloat($('#toll').value);
-    else corpo.riferimento.tolleranza_mm=parseFloat($('#toll').value);
+    const [ra,rb]=state.puntiRif, [ta,tb]=state.punti;
+    const esito=window.MisuraCore.misuraManuale({
+      tipo, latoPersonalizzato:parseFloat($('#lato').value),
+      latoRifPx:Math.hypot(rb[0]-ra[0],rb[1]-ra[1]),
+      latoTargetPx:Math.hypot(tb[0]-ta[0],tb[1]-ta[1]),
+      sigmaSegPx:parseFloat($('#sigmaseg').value),
+      tolleranzaMm:parseFloat($('#tolreq').value) });
+    esito.modalita=modalita;
+    renderEsito(esito);
+    btn.textContent='Misura'; aggiornaBottone(); return;
   }
+
+  // percorso ArUco: rilevamento opencv sul server locale
+  const corpo={ id:state.id, punti:state.punti, modalita,
+    tolleranza_mm:parseFloat($('#tolreq').value), sigma_seg_px:parseFloat($('#sigmaseg').value),
+    riferimento:{tipo, lato_mm:parseFloat($('#lato').value)} };
+  if(tipo==='non_verificato') corpo.riferimento.frazione=parseFloat($('#toll').value);
+  else corpo.riferimento.tolleranza_mm=parseFloat($('#toll').value);
   try{
     const res=await fetch('/api/misura',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
     const d=await res.json();
