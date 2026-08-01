@@ -19,6 +19,7 @@ il tipo di divergenza che questo test esiste per intercettare.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -350,6 +351,40 @@ def test_discordi_non_espone_scala_anche_in_js(tmp_path: Path) -> None:
     chiavi = _esegui_js(tmp_path)["chiavi_discordi"]
     assert "scala" not in chiavi
     assert "motivo" in chiavi
+
+
+def test_js_di_pagina_sintatticamente_valido(tmp_path: Path) -> None:
+    """La pagina non ha un compilatore davanti: un refuso nel JS inline la rompe
+    in silenzio e il gate Python non se ne accorge. Qui node fa da parser."""
+    pagina = (_RADICE / "app" / "index.html").read_text(encoding="utf-8")
+    blocchi = re.findall(
+        r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", pagina, re.S
+    )
+    assert blocchi, "nessuno script inline trovato in index.html"
+
+    sorgente = tmp_path / "pagina.js"
+    sorgente.write_text("\n".join(blocchi), encoding="utf-8")
+    completato = subprocess.run(
+        ["node", "--check", str(sorgente)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert completato.returncode == 0, completato.stderr
+
+
+def test_la_pagina_non_fa_rete() -> None:
+    """L'app e' client-only: il calcolo gira in `core.js` e nessuna immagine
+    lascia il dispositivo perche' non va da nessuna parte (§13.1).
+
+    Il percorso ArUco resta disponibile come strumento di validazione lato
+    server, ma fuori dall'interfaccia: se una fetch rientra nella pagina, la
+    proprieta' "nulla esce" smette di valere e il gate deve dirlo.
+    """
+    pagina = (_RADICE / "app" / "index.html").read_text(encoding="utf-8")
+    for vietato in ("fetch(", "XMLHttpRequest", "WebSocket", "navigator.sendBeacon", "/api/"):
+        assert vietato not in pagina, f"la pagina non deve fare rete: trovato {vietato}"
 
 
 def test_core_js_non_fa_rete() -> None:

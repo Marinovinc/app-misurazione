@@ -12,6 +12,7 @@
     --bg:#eef1f2; --surface:#fff; --surface-2:#f6f8f9; --ink:#0f171c; --muted:#5c6b72;
     --faint:#84949b; --line:#dce3e6; --line-strong:#c3ccd0; --accent:#0b7f93; --accent-ink:#075463;
     --good:#1c8a4e; --good-bg:#e6f3ea; --warn:#a86a12; --warn-bg:#f6ecd8; --crit:#9d4a50; --crit-bg:#f0e4e5;
+    --rifb:#7a4fa8;
     --shadow:0 1px 2px rgba(15,23,28,.05),0 8px 24px -12px rgba(15,23,28,.18);
     --mono:ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,Consolas,monospace;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -19,13 +20,13 @@
   @media (prefers-color-scheme:dark){:root{
     --bg:#0b1013;--surface:#121a1f;--surface-2:#0f171b;--ink:#e7eef1;--muted:#8b9aa2;--faint:#5f6f77;
     --line:#212e35;--line-strong:#2c3c44;--accent:#2cb8d0;--accent-ink:#7fd8e6;--good:#37c07f;--good-bg:#10241a;
-    --warn:#e0a341;--warn-bg:#241c10;--crit:#d97b80;--crit-bg:#241315;--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -14px rgba(0,0,0,.6);}}
+    --warn:#e0a341;--warn-bg:#241c10;--crit:#d97b80;--crit-bg:#241315;--rifb:#b18ade;--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -14px rgba(0,0,0,.6);}}
   :root[data-theme="dark"]{--bg:#0b1013;--surface:#121a1f;--surface-2:#0f171b;--ink:#e7eef1;--muted:#8b9aa2;--faint:#5f6f77;
     --line:#212e35;--line-strong:#2c3c44;--accent:#2cb8d0;--accent-ink:#7fd8e6;--good:#37c07f;--good-bg:#10241a;
-    --warn:#e0a341;--warn-bg:#241c10;--crit:#d97b80;--crit-bg:#241315;--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -14px rgba(0,0,0,.6);}
+    --warn:#e0a341;--warn-bg:#241c10;--crit:#d97b80;--crit-bg:#241315;--rifb:#b18ade;--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -14px rgba(0,0,0,.6);}
   :root[data-theme="light"]{--bg:#eef1f2;--surface:#fff;--surface-2:#f6f8f9;--ink:#0f171c;--muted:#5c6b72;--faint:#84949b;
     --line:#dce3e6;--line-strong:#c3ccd0;--accent:#0b7f93;--accent-ink:#075463;--good:#1c8a4e;--good-bg:#e6f3ea;
-    --warn:#a86a12;--warn-bg:#f6ecd8;--crit:#9d4a50;--crit-bg:#f0e4e5;--shadow:0 1px 2px rgba(15,23,28,.05),0 8px 24px -12px rgba(15,23,28,.18);}
+    --warn:#a86a12;--warn-bg:#f6ecd8;--crit:#9d4a50;--crit-bg:#f0e4e5;--rifb:#7a4fa8;--shadow:0 1px 2px rgba(15,23,28,.05),0 8px 24px -12px rgba(15,23,28,.18);}
 
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;}
@@ -91,6 +92,40 @@
   .imgwrap svg{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;}
   .hint{font-size:12.5px;color:var(--muted);margin:10px 2px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .tag{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid var(--line);background:var(--surface-2);color:var(--accent-ink);}
+
+  /* due porte d'ingresso: e' la porta a determinare la modalita', non un radio */
+  .porte{display:grid;grid-template-columns:1fr;gap:12px;}
+  @media(min-width:620px){.porte{grid-template-columns:1fr 1fr;}}
+  .porta{padding:16px;}
+  .porta h3{font-size:15.5px;margin-bottom:6px;}
+  .porta p{font-size:12.8px;}
+  .porta[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--surface));}
+  .porta[aria-pressed="true"] h3::after{content:"✓";color:var(--accent);font-weight:700;margin-left:auto;}
+
+  /* dichiarazione di modalita': sempre visibile, sempre prima di misurare */
+  .modo{margin-top:14px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;background:var(--surface-2);padding:13px 15px;}
+  .modo[hidden]{display:none;}
+  .modo-t{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:14px;font-weight:640;}
+  .modo-p{margin:7px 0 0;font-size:12.8px;color:var(--muted);}
+  .cond{list-style:none;margin:9px 0 0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:12.8px;}
+  .cond li{display:flex;gap:8px;align-items:flex-start;color:var(--muted);}
+  .cond li::before{content:"○";color:var(--faint);font-family:var(--mono);line-height:1.45;}
+  .cond li.si{color:var(--ink);}
+  .cond li.si::before{content:"✓";color:var(--good);}
+  .cond li.no::before{content:"✗";color:var(--warn);}
+  .cond li.attesa::before{content:"…";color:var(--faint);}
+
+  /* riferimenti: A e B sono oggetti distinti, con colori distinti sull'immagine */
+  .rif{border:1px solid var(--line);border-radius:10px;padding:12px 13px;margin-bottom:12px;background:var(--surface-2);}
+  .rif-h{display:flex;align-items:center;gap:8px;font-size:11.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin-bottom:9px;}
+  .puntino{width:10px;height:10px;border-radius:50%;flex:none;}
+  .puntino.a{background:var(--accent);}
+  .puntino.b{background:var(--rifb);}
+  .rif .field:last-child{margin-bottom:0;}
+  .toggle{display:flex;gap:9px;align-items:flex-start;font-size:13px;color:var(--ink);margin-bottom:14px;cursor:pointer;}
+  .toggle input{margin-top:3px;flex:none;accent-color:var(--accent);}
+  .toggle small{display:block;color:var(--muted);font-size:12.3px;margin-top:2px;}
+  .toggle.bloccato{cursor:default;opacity:.9;}
 
   /* controls */
   .field{margin-bottom:14px;}
@@ -158,7 +193,7 @@
     <div class="tasks">
       <button class="task" data-go="oggetto">
         <h3>Misura oggetto planare <span class="badge ok">funziona</span></h3>
-        <p>Foto con un marker ArUco accanto a un oggetto piatto. Usa il nucleo di misura reale, con incertezza ed esito.</p>
+        <p>Una foto con un riferimento di dimensione nota accanto a un oggetto piatto, e due clic. Usa il nucleo di misura reale, con incertezza, provenienza ed esito.</p>
       </button>
       <button class="task" data-go="corpo">
         <h3>Misure corporee <span class="badge">input manuale</span></h3>
@@ -170,43 +205,62 @@
   <section class="screen" id="screen-oggetto" hidden>
   <header>
     <div class="brand">app-misurazione</div>
-    <h1>Misura interattiva</h1>
-    <p class="sub">Carica una foto con un marker ArUco visibile e complanare all'oggetto, poi clicca i due estremi del target. Il calcolo gira sul nucleo metrologico reale: valore, incertezza, provenienza ed esito.</p>
+    <h1>Misura oggetto planare</h1>
+    <p class="sub">Tutto il calcolo gira su questo dispositivo: nessuna immagine esce, nessuna rete. Il valore esce sempre con la sua incertezza e la sua provenienza — e se la scala non è verificabile non esce nessun numero.</p>
   </header>
 
   <details class="guida" open>
     <summary>Come si usa — guida rapida</summary>
     <ol>
-      <li><b>Ti serve un marker ArUco (4×4)</b> nella foto, accanto all'oggetto e sullo <b>stesso piano</b>. È il metro di riferimento: senza, l'app non può conoscere la scala.</li>
-      <li><b>Scatta o carica</b> una foto — fotocamera, scegli un file, o trascina l'immagine.</li>
-      <li><b>Clicca i due estremi</b> di ciò che vuoi misurare, direttamente sull'immagine.</li>
-      <li><b>Indica la dimensione reale</b> del marker (il lato in mm) e premi <b>Misura</b>.</li>
+      <li><b>Ti serve un riferimento di dimensione nota</b> accanto all'oggetto e sullo <b>stesso piano</b>: una tessera ID-1 (bancomat, fedeltà, trasporti — 85,60 × 53,98 mm in tutto il mondo) o una dimensione che leggi col righello. Senza, l'app non può conoscere la scala.</li>
+      <li><b>Scegli come arriva l'immagine.</b> Scattare qui dentro è l'unico caso in cui l'app può affermare che l'acquisizione è live; una foto dall'archivio resta stima.</li>
+      <li><b>Clicca i due estremi del riferimento</b>, poi quelli dell'oggetto da misurare.</li>
+      <li><b>Con due riferimenti distinti</b> l'app confronta le due scale che ne ricava: se non concordano te lo dice invece di darti un numero, e se concordano l'incertezza si stringe.</li>
       <li>Leggi il risultato: <b>valore ± incertezza</b> e l'esito — entro tolleranza, fuori tolleranza, oppure non misurabile.</li>
     </ol>
-    <p class="guida-tip"><b>Non rileva il marker?</b> Riprova con il marker più grande nel fotogramma, ben illuminato, senza riflessi e tutto visibile. Su uno schermo di telefono è difficile (riflessi, moiré): meglio <b>stamparlo</b>.</p>
+    <p class="guida-tip"><b>Il riferimento va sul piano che stai misurando.</b> Tenuto in mano, o più vicino alla fotocamera dell'oggetto, produce un errore di scala sistematico che nessuna incertezza dichiarata cattura. Su superfici curve la tessera è tangente al piano e la sua proiezione è distorta.</p>
   </details>
+
+  <!-- 1 · acquisizione: e' la porta a determinare la modalita' -->
+  <section class="panel">
+    <div class="panel-h"><span>1 · Come arriva l'immagine</span><button class="ghost" id="ricomincia" hidden>ricomincia</button></div>
+    <div class="panel-b">
+      <div class="porte">
+        <button class="task porta" id="portaScatto" aria-pressed="false">
+          <h3>Scatta ora <span class="badge ok">certificata possibile</span></h3>
+          <p>La foto viene catturata qui dentro, adesso. È l'unico caso in cui l'app può affermare che l'acquisizione è live.</p>
+        </button>
+        <button class="task porta" id="portaArchivio" aria-pressed="false">
+          <h3>Scegli un'immagine <span class="badge">solo stima</span></h3>
+          <p>Dalla galleria o dall'archivio. L'app non può sapere come è stata scattata: resta modalità stima, sempre.</p>
+        </button>
+      </div>
+      <input type="file" id="file" accept="image/*">
+
+      <div class="cam" id="cam" hidden>
+        <div class="camwrap"><video id="video" autoplay playsinline muted></video><div class="camguide"></div></div>
+        <p class="camhint">Inquadra l'oggetto con i riferimenti appoggiati sullo stesso piano</p>
+        <div class="cam-actions">
+          <button class="go" id="capture">Cattura fotogramma</button>
+          <button class="ghost" id="camClose">annulla</button>
+        </div>
+      </div>
+
+      <div class="modo" id="modo" hidden>
+        <div class="modo-t" id="modoT"></div>
+        <p class="modo-p" id="modoP"></p>
+        <ul class="cond" id="cond"></ul>
+      </div>
+    </div>
+  </section>
 
   <div class="grid">
     <!-- colonna immagine -->
     <section class="panel">
-      <div class="panel-h"><span>1 · Immagine e target</span><button class="ghost" id="reset" hidden>azzera punti</button></div>
+      <div class="panel-h"><span>2 · Riferimenti e target</span><button class="ghost" id="reset" hidden>azzera punti</button></div>
       <div class="panel-b">
-        <label class="drop" id="drop">
-          <span class="big">Trascina o scegli una foto</span>
-          <p>con un ArUco (dizionario 4×4) accanto all'oggetto</p>
-          <input type="file" id="file" accept="image/*">
-        </label>
-        <div class="orbtn"><button class="ghost" id="camBtn">📷 Scatta da webcam</button></div>
-        <div class="cam" id="cam" hidden>
-          <div class="camwrap"><video id="video" autoplay playsinline muted></video><div class="camguide"></div></div>
-          <p class="camhint">Porta il marker dentro il riquadro e riempilo il più possibile</p>
-          <div class="cam-actions">
-            <button class="go" id="capture">Cattura fotogramma</button>
-            <button class="ghost" id="camClose">annulla</button>
-          </div>
-        </div>
         <div class="stage" id="stage">
-          <div class="imgwrap"><img id="img" alt="immagine caricata"><svg id="ov" preserveAspectRatio="xMidYMid meet"></svg></div>
+          <div class="imgwrap"><img id="img" alt="immagine acquisita"><svg id="ov" preserveAspectRatio="xMidYMid meet"></svg></div>
         </div>
         <div class="hint" id="hint" hidden></div>
       </div>
@@ -214,36 +268,43 @@
 
     <!-- colonna controlli -->
     <section class="panel">
-      <div class="panel-h"><span>2 · Riferimento e criterio</span></div>
+      <div class="panel-h"><span>3 · Riferimenti e criterio</span></div>
       <div class="panel-b">
-        <div class="field">
-          <label for="tipo">Riferimento di scala</label>
-          <select id="tipo">
-            <optgroup label="Marker ArUco — rilevato in automatico">
-              <option value="verificato" data-modo="aruco">Marker stampato · verificato al calibro</option>
-              <option value="non_verificato" data-modo="aruco">Marker stampato · non verificato</option>
-            </optgroup>
-            <optgroup label="Riferimento a clic — nessuna stampa">
-              <option value="id1_lungo" data-modo="manuale">Carta ID-1 / bancomat · lato lungo (85,60 mm)</option>
-              <option value="id1_corto" data-modo="manuale">Carta ID-1 · lato corto (53,98 mm)</option>
-              <option value="personalizzato" data-modo="manuale">Dimensione nota · righello (mm)</option>
-            </optgroup>
-          </select>
-        </div>
-        <div class="row" id="rigaLato">
-          <div class="field"><label for="lato">Lato marker (mm)</label><input type="number" id="lato" value="50" min="1" step="0.1"></div>
-          <div class="field" id="campoToll"><label for="toll">Tolleranza (mm)</label><input type="number" id="toll" value="0.2" min="0" step="0.05"></div>
-        </div>
-        <div class="field">
-          <label>Modalità</label>
-          <div class="seg">
-            <label><input type="radio" name="mod" value="stima" checked>Stima</label>
-            <label><input type="radio" name="mod" value="certificata">Certificata</label>
+        <label class="toggle" id="toggleDoppio">
+          <input type="checkbox" id="usaDoppio">
+          <span><b>Verifica con un secondo riferimento</b>
+            <small>Due riferimenti su <b>oggetti distinti</b> danno due scale: se non concordano l'app rifiuta la misura, se concordano l'incertezza si stringe. Richiesto per la modalità certificata.</small></span>
+        </label>
+
+        <div class="rif" id="rifBoxA">
+          <div class="rif-h"><span class="puntino a"></span><span>Riferimento A</span></div>
+          <div class="field">
+            <label for="tipoA">Dimensione nota</label>
+            <select id="tipoA">
+              <option value="id1_lungo">Tessera ID-1 · lato lungo (85,60 mm)</option>
+              <option value="id1_corto">Tessera ID-1 · lato corto (53,98 mm)</option>
+              <option value="personalizzato">Altra dimensione nota · righello (mm)</option>
+            </select>
           </div>
+          <div class="field" id="campoLatoA" style="display:none"><label for="latoA">Dimensione (mm)</label><input type="number" id="latoA" value="100" min="1" step="0.1"></div>
         </div>
+
+        <div class="rif" id="rifBoxB" hidden>
+          <div class="rif-h"><span class="puntino b"></span><span>Riferimento B</span></div>
+          <div class="field">
+            <label for="tipoB">Dimensione nota</label>
+            <select id="tipoB">
+              <option value="id1_lungo">Tessera ID-1 · lato lungo (85,60 mm)</option>
+              <option value="id1_corto">Tessera ID-1 · lato corto (53,98 mm)</option>
+              <option value="personalizzato">Altra dimensione nota · righello (mm)</option>
+            </select>
+          </div>
+          <div class="field" id="campoLatoB" style="display:none"><label for="latoB">Dimensione (mm)</label><input type="number" id="latoB" value="100" min="1" step="0.1"></div>
+        </div>
+
         <div class="row">
           <div class="field"><label for="tolreq">Tolleranza richiesta (mm)</label><input type="number" id="tolreq" value="20" min="0.1" step="0.5"></div>
-          <div class="field"><label for="sigmaseg">Incertezza click (px)</label><input type="number" id="sigmaseg" value="1" min="0" step="0.5"></div>
+          <div class="field"><label for="sigmaseg">Incertezza clic (px)</label><input type="number" id="sigmaseg" value="1" min="0" step="0.5"></div>
         </div>
         <button class="go" id="misura" disabled>Misura</button>
         <div class="err" id="err" hidden></div>
@@ -253,7 +314,7 @@
 
   <div id="esito"></div>
 
-  <p class="foot"><b>App locale, fase 1.</b> Prima UI sopra il nucleo di fase 0. Il riferimento ArUco è rilevato davvero; i bordi del target sono i tuoi due click (la segmentazione automatica è fase successiva). Nessun dato lascia la tua macchina.</p>
+  <p class="foot"><b>Limiti dichiarati.</b> La scala viene dal riferimento che clicchi tu: l'app non rileva i bordi da sola, e i tuoi clic hanno l'incertezza che dichiari qui accanto. La modalità certificata qui significa <b>acquisizione live in-app + due riferimenti distinti le cui scale concordano</b> — non promette l'1%, che richiederebbe anche cattura guidata e un profilo di calibrazione per modello di dispositivo. Nessuna immagine lascia il dispositivo.</p>
   </section>
 
   <section class="screen" id="screen-corpo" hidden>
@@ -266,37 +327,102 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const state = { id:null, natW:0, natH:0, punti:[], puntiRif:[], modoRif:'aruco', fase:'target' };
 
-const drop=$('#drop'), file=$('#file'), stage=$('#stage'), img=$('#img'), ov=$('#ov');
+// La modalita' NON e' una voce che l'utente sceglie: e' derivata dalle condizioni
+// che l'app puo' davvero verificare (§4.1). Prima c'era un radio libero, e si
+// poteva ottenere una scheda etichettata "Certificata" su una foto trascinata
+// dalla galleria: il numero non era inventato, ma la provenienza si'.
+//
+// `origine` viene impostata dalla porta d'ingresso E confermata da come
+// l'immagine e' effettivamente arrivata: l'app afferma "live" solo di cio' che
+// ha catturato lei. Un <input type=file capture> aprirebbe la fotocamera di
+// sistema e restituirebbe un file indistinguibile da uno d'archivio — per
+// questo non viene usato.
+const state = {
+  origine:null,               // 'scatto' | 'archivio'
+  dataUrl:null, natW:0, natH:0,
+  rifA:[], rifB:[], punti:[],
+  fase:'rifA',                // 'rifA' -> ('rifB') -> 'target'
+  doppio:false,
+};
+
+const file=$('#file'), stage=$('#stage'), img=$('#img'), ov=$('#ov');
 const hint=$('#hint'), reset=$('#reset'), btn=$('#misura'), err=$('#err');
+const modo=$('#modo'), modoT=$('#modoT'), modoP=$('#modoP'), cond=$('#cond');
+const portaScatto=$('#portaScatto'), portaArchivio=$('#portaArchivio'), ricomincia=$('#ricomincia');
+const chkDoppio=$('#usaDoppio'), rifBoxB=$('#rifBoxB');
 
-drop.addEventListener('click',()=>file.click());
-;['dragover','dragenter'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over');}));
-;['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over');}));
-drop.addEventListener('drop',ev=>{if(ev.dataTransfer.files[0])caricaFile(ev.dataTransfer.files[0]);});
-file.addEventListener('change',()=>{if(file.files[0])caricaFile(file.files[0]);});
+portaArchivio.addEventListener('click',()=>{ chiudiCam(); file.click(); });
+portaScatto.addEventListener('click',()=>{ apriCam(); });
+file.addEventListener('change',()=>{ if(file.files[0]){ impostaOrigine('archivio'); caricaFile(file.files[0]); } });
 
-// --- cattura da webcam (getUserMedia; su 127.0.0.1 e' contesto sicuro) ---
-const camBtn=$('#camBtn'), cam=$('#cam'), video=$('#video'), capture=$('#capture'), camClose=$('#camClose');
-let stream=null;
-camBtn.addEventListener('click',async()=>{
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setHint('⚠ webcam non supportata dal browser'); return; }
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1920},height:{ideal:1080}}});
-    video.srcObject=stream; cam.hidden=false; camBtn.textContent='📷 webcam attiva';
-  }catch(e){ setHint('⚠ webcam non disponibile: '+(e.message||e.name)); }
+// un file trascinato e' per definizione d'archivio: stessa porta, stessa modalita'
+;['dragover','dragenter'].forEach(e=>portaArchivio.addEventListener(e,ev=>{ev.preventDefault();portaArchivio.classList.add('over');}));
+;['dragleave','drop'].forEach(e=>portaArchivio.addEventListener(e,ev=>{ev.preventDefault();portaArchivio.classList.remove('over');}));
+portaArchivio.addEventListener('drop',ev=>{
+  const f=ev.dataTransfer.files[0];
+  if(f){ chiudiCam(); impostaOrigine('archivio'); caricaFile(f); }
 });
-function chiudiCam(){ if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;} cam.hidden=true; camBtn.textContent='📷 Scatta da webcam'; }
+
+function impostaOrigine(o){
+  state.origine=o;
+  portaScatto.setAttribute('aria-pressed', String(o==='scatto'));
+  portaArchivio.setAttribute('aria-pressed', String(o==='archivio'));
+  // il doppio riferimento e' la condizione che rende possibile la certificata:
+  // con lo scatto in-app parte attivo. Toglierlo resta possibile, ma e' un'azione
+  // esplicita dell'utente e il banner dichiara subito che si scende a stima.
+  if(o==='scatto' && !chkDoppio.checked){ chkDoppio.checked=true; }
+  state.doppio=chkDoppio.checked;
+  rifBoxB.hidden=!state.doppio;
+  ricomincia.hidden=false;
+  aggiornaModo();
+}
+
+chkDoppio.addEventListener('change',()=>{
+  state.doppio=chkDoppio.checked;
+  rifBoxB.hidden=!state.doppio;
+  azzeraPunti();
+  aggiornaModo();
+});
+
+ricomincia.addEventListener('click',()=>{
+  chiudiCam();
+  state.origine=null; state.dataUrl=null;
+  portaScatto.setAttribute('aria-pressed','false');
+  portaArchivio.setAttribute('aria-pressed','false');
+  file.value=''; img.removeAttribute('src'); stage.classList.remove('show');
+  hint.hidden=true; $('#esito').innerHTML=''; err.hidden=true;
+  ricomincia.hidden=true; modo.hidden=true;
+  azzeraPunti();
+});
+
+// --- cattura in-app (getUserMedia). Il flusso video non lascia la pagina: il
+// fotogramma finisce in un canvas locale e da li' nel calcolo, senza rete. ---
+const cam=$('#cam'), video=$('#video'), capture=$('#capture'), camClose=$('#camClose');
+let stream=null;
+async function apriCam(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    setHint('⚠ fotocamera non disponibile in questo browser: resta la scelta da archivio'); return;
+  }
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    video.srcObject=stream; cam.hidden=false;
+  }catch(e){ setHint('⚠ fotocamera non disponibile: '+(e.message||e.name)); }
+}
+function chiudiCam(){ if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;} cam.hidden=true; }
 camClose.addEventListener('click',chiudiCam);
 capture.addEventListener('click',()=>{
-  if(!video.videoWidth){ setHint('⚠ la webcam non è ancora pronta'); return; }
+  if(!video.videoWidth){ setHint('⚠ la fotocamera non è ancora pronta'); return; }
   const c=document.createElement('canvas');
   c.width=video.videoWidth; c.height=video.videoHeight;
   c.getContext('2d').drawImage(video,0,0);
   const dataUrl=c.toDataURL('image/png');
   chiudiCam();
-  state.dataUrl=dataUrl; img.src=dataUrl; // -> evento load -> /api/analizza
+  // l'origine 'scatto' si scrive QUI, non alla pressione della porta: e' l'unico
+  // punto in cui l'app sa di aver catturato lei il fotogramma.
+  impostaOrigine('scatto');
+  state.dataUrl=dataUrl; img.src=dataUrl;
 });
 
 function caricaFile(f){
@@ -304,141 +430,156 @@ function caricaFile(f){
   r.onload=()=>{ state.dataUrl=r.result; img.src=r.result; };
   r.readAsDataURL(f);
 }
-img.addEventListener('load',async()=>{
+img.addEventListener('load',()=>{
   if(!state.dataUrl) return;
   state.natW=img.naturalWidth; state.natH=img.naturalHeight;
   ov.setAttribute('viewBox',`0 0 ${state.natW} ${state.natH}`);
   stage.classList.add('show');
-  state.punti=[]; state.puntiRif=[]; disegnaMarker(null); render();
-  if(state.modoRif==='manuale'){
-    state.id='manuale'; state.fase='riferimento';
-    setHint('clicca i 2 estremi del RIFERIMENTO', descrizioneRif());
-    aggiornaBottone(); return;
-  }
-  setHint('rilevo il riferimento…');
-  try{
-    const res=await fetch('/api/analizza',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({immagine:state.dataUrl})});
-    const d=await res.json();
-    if(!res.ok){ state.id=null; disegnaMarker(null); btn.disabled=true;
-      const dim=d.larghezza?` · immagine ${d.larghezza}×${d.altezza}px`:'';
-      setHint('⚠ '+(d.errore||'riferimento non trovato')+dim, 'avvicina il marker, riempi il fotogramma, buona luce'); return; }
-    state.id=d.id; disegnaMarker(d.angoli);
-    const frazione = d.lato_px / Math.min(d.larghezza, d.altezza);
-    if(frazione < 0.15) setHint(`⚠ riferimento piccolo (lato ${d.lato_px}px): avvicinalo per più precisione`, `clicca i 2 estremi del target`);
-    else setHint(`riferimento rilevato · lato ${d.lato_px}px`, `clicca i 2 estremi del target`);
-    aggiornaBottone();
-  }catch(e){ setHint('⚠ errore di rete'); }
+  azzeraPunti();
+  aggiornaModo();
 });
 
 ov.addEventListener('click',ev=>{
   if(!state.dataUrl) return;
   const r=img.getBoundingClientRect();
   const p=[(ev.clientX-r.left)*state.natW/r.width,(ev.clientY-r.top)*state.natH/r.height];
-  if(state.modoRif==='manuale'){
-    if(state.fase==='riferimento'){
-      if(state.puntiRif.length>=2) state.puntiRif=[];
-      state.puntiRif.push(p);
-      if(state.puntiRif.length===2){ state.fase='target'; setHint('ora clicca i 2 estremi dell\'OGGETTO da misurare'); }
-    } else {
-      if(state.punti.length>=2) state.punti=[];
-      state.punti.push(p);
-    }
-  } else {
-    if(!state.id) return;
-    if(state.punti.length>=2) state.punti=[];
-    state.punti.push(p);
+  const lista = state.fase==='rifA' ? state.rifA : state.fase==='rifB' ? state.rifB : state.punti;
+  if(lista.length>=2) lista.length=0;
+  lista.push(p);
+  if(lista.length===2){
+    if(state.fase==='rifA') state.fase = state.doppio ? 'rifB' : 'target';
+    else if(state.fase==='rifB') state.fase = 'target';
   }
-  render(); aggiornaBottone();
+  render(); aggiornaBottone(); aggiornaHint(); aggiornaModo();
 });
-reset.addEventListener('click',()=>{
-  state.punti=[];
-  if(state.modoRif==='manuale'){ state.puntiRif=[]; state.fase='riferimento'; setHint('clicca i 2 estremi del RIFERIMENTO', descrizioneRif()); }
-  render(); aggiornaBottone();
-});
+
+reset.addEventListener('click',azzeraPunti);
+
+function azzeraPunti(){
+  state.rifA=[]; state.rifB=[]; state.punti=[]; state.fase='rifA';
+  $('#esito').innerHTML=''; err.hidden=true;
+  render(); aggiornaBottone(); aggiornaHint();
+}
 
 function aggiornaBottone(){
-  const pronto = state.modoRif==='manuale'
-    ? (state.puntiRif.length===2 && state.punti.length===2)
-    : (!!state.id && state.punti.length===2);
-  btn.disabled=!pronto;
-  reset.hidden=(state.punti.length===0 && state.puntiRif.length===0);
+  const rifPronti = state.rifA.length===2 && (!state.doppio || state.rifB.length===2);
+  btn.disabled = !(state.dataUrl && rifPronti && state.punti.length===2);
+  reset.hidden = !(state.rifA.length || state.rifB.length || state.punti.length);
 }
 
-function descrizioneRif(){
-  const t=$('#tipo').value;
-  if(t==='id1_lungo') return 'lato lungo della carta · 85,60 mm';
-  if(t==='id1_corto') return 'lato corto della carta · 53,98 mm';
+function descrizioneRif(sel){
+  const t=$(sel).value;
+  if(t==='id1_lungo') return 'lato lungo della tessera · 85,60 mm';
+  if(t==='id1_corto') return 'lato corto della tessera · 53,98 mm';
   return 'la dimensione nota che hai indicato';
 }
-$('#tipo').addEventListener('change',aggiornaTipo);
-function aggiornaTipo(){
-  const opt=$('#tipo').selectedOptions[0];
-  state.modoRif=(opt&&opt.dataset.modo)||'aruco';
-  const tipo=$('#tipo').value;
-  const mostraLato=(state.modoRif==='aruco')||(tipo==='personalizzato');
-  const mostraToll=(state.modoRif==='aruco');
-  $('#rigaLato').style.display=mostraLato?'grid':'none';
-  $('#campoToll').style.display=mostraToll?'block':'none';
-  document.querySelector('label[for="lato"]').textContent=(state.modoRif==='manuale')?'Dimensione (mm)':'Lato marker (mm)';
-  const nv=tipo==='non_verificato';
-  $('#toll').step=nv?'0.01':'0.05';
-  $('#campoToll').querySelector('label').textContent=nv?'Frazione stampa':'Tolleranza (mm)';
-  if(state.modoRif==='aruco') $('#toll').value=nv?'0.02':'0.2';
-  state.punti=[]; state.puntiRif=[];
-  if(state.dataUrl) img.dispatchEvent(new Event('load')); // ri-prepara: rileva o chiedi i clic
-  else { render(); aggiornaBottone(); }
+function aggiornaHint(){
+  if(!state.dataUrl){ hint.hidden=true; return; }
+  if(state.fase==='rifA') setHint('clicca i 2 estremi del <b>riferimento A</b>', descrizioneRif('#tipoA'));
+  else if(state.fase==='rifB') setHint('clicca i 2 estremi del <b>riferimento B</b> — dev\'essere un <b>oggetto distinto</b> dal primo', descrizioneRif('#tipoB'));
+  else setHint('clicca i 2 estremi dell\'<b>oggetto da misurare</b>');
 }
 
-let mk=null;
-function disegnaMarker(ang){ mk=ang; render(); }
-function render(){
-  const r=state.natW*0.006+2; // raggio punti in coord naturali
+// il campo "dimensione (mm)" esiste solo dove serve: per i formati normati la
+// dimensione non si digita, e' quella e basta
+function legaTipo(sel,campo){
+  $(sel).addEventListener('change',()=>{
+    $(campo).style.display = $(sel).value==='personalizzato' ? 'block' : 'none';
+    aggiornaHint();
+  });
+}
+legaTipo('#tipoA','#campoLatoA');
+legaTipo('#tipoB','#campoLatoB');
+
+function colore(nome){
+  return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+}
+function segmento(punti,col,tratteggio){
+  const r=state.natW*0.006+2;
   let s='';
-  if(mk){ const p=mk.map(a=>a.join(',')).join(' ');
-    s+=`<polygon points="${p}" fill="rgba(11,127,147,.14)" stroke="#0b7f93" stroke-width="${r*0.5}"/>`; }
-  const pr=state.puntiRif||[];
-  if(pr.length===2){ const[a,b]=pr;
-    s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#0b7f93" stroke-width="${r*0.5}"/>`; }
-  pr.forEach(p=>{ s+=`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="#0b7f93" stroke="#fff" stroke-width="${r*0.35}"/>`; });
-  if(state.punti.length===2){ const[a,b]=state.punti;
-    s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#a86a12" stroke-width="${r*0.5}" stroke-dasharray="${r*1.5} ${r}"/>`; }
-  state.punti.forEach(p=>{ s+=`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="#a86a12" stroke="#fff" stroke-width="${r*0.35}"/>`; });
-  ov.innerHTML=s;
+  if(punti.length===2){ const[a,b]=punti;
+    const d=tratteggio?` stroke-dasharray="${r*1.5} ${r}"`:'';
+    s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="${r*0.5}"${d}/>`; }
+  punti.forEach(p=>{ s+=`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${col}" stroke="#fff" stroke-width="${r*0.35}"/>`; });
+  return s;
+}
+function render(){
+  ov.innerHTML = segmento(state.rifA, colore('--accent'), false)
+               + segmento(state.rifB, colore('--rifb'), false)
+               + segmento(state.punti, colore('--warn'), true);
 }
 function setHint(a,b){ hint.hidden=false; hint.innerHTML = a + (b?` <span class="tag">${b}</span>`:''); }
 
-btn.addEventListener('click',async()=>{
-  err.hidden=true; btn.disabled=true; btn.textContent='calcolo…';
-  const tipo=$('#tipo').value;
-  const modalita=document.querySelector('input[name=mod]:checked').value;
+// --- dichiarazione di modalita': sempre visibile, sempre PRIMA di misurare ---
+// La transizione fra le due modalita' non e' mai automatica (§4.1). Qui non c'e'
+// nemmeno una transizione: c'e' una constatazione, dichiarata prima del calcolo,
+// di quale modalita' le condizioni attuali sostengono.
+function modalitaCorrente(){
+  return (state.origine==='scatto' && state.doppio) ? 'certificata' : 'stima';
+}
+function riga(stato,testo,nota){
+  return `<li class="${stato}">${testo}${nota?` <span class="tag">${nota}</span>`:''}</li>`;
+}
+function aggiornaModo(esito){
+  if(!state.origine){ modo.hidden=true; return; }
+  modo.hidden=false;
+  const cert = modalitaCorrente()==='certificata';
+  const rifiutata = esito && esito.tipo==='RifiutoMotivato';
+  const etichetta = cert ? '<span class="chip cert">Certificata</span>' : '<span class="chip stima">Stima</span>';
+  modoT.innerHTML = rifiutata
+    ? etichetta + '<span>tentata, ma la verifica non è passata: nessuna misura</span>'
+    : etichetta + `<span>misurerà in modalità ${cert?'certificata':'stima'}</span>`;
+  modoP.textContent = rifiutata
+    ? "Le due scale non concordano: una delle due è sbagliata e l'app non può sapere quale. Correggi i riferimenti — devono essere oggetti distinti, di dimensione davvero nota, appoggiati sul piano che stai misurando — e rimisura."
+    : cert
+    ? "Certificata qui significa: acquisizione live catturata dall'app e due riferimenti distinti le cui scale concordano. Non promette l'1% — quello richiederebbe anche cattura guidata e un profilo di calibrazione per modello di dispositivo."
+    : (state.origine==='archivio'
+        ? "L'immagine viene dall'archivio: l'app non può affermare come e quando è stata scattata, quindi per questa immagine la modalità certificata non è disponibile."
+        : "Hai scattato in-app, ma con un solo riferimento non c'è nulla da confrontare: senza quella verifica la misura resta una stima.");
 
-  // percorso a clic manuale: calcolo CLIENT-ONLY, nessun server
-  if(state.modoRif==='manuale'){
-    const [ra,rb]=state.puntiRif, [ta,tb]=state.punti;
-    const esito=window.MisuraCore.misuraManuale({
-      tipo, latoPersonalizzato:parseFloat($('#lato').value),
-      latoRifPx:Math.hypot(rb[0]-ra[0],rb[1]-ra[1]),
-      latoTargetPx:Math.hypot(tb[0]-ta[0],tb[1]-ta[1]),
-      sigmaSegPx:parseFloat($('#sigmaseg').value),
-      tolleranzaMm:parseFloat($('#tolreq').value) });
-    esito.modalita=modalita;
-    renderEsito(esito);
-    btn.textContent='Misura'; aggiornaBottone(); return;
-  }
+  let h = riga(state.origine==='scatto'?'si':'no',
+               'Acquisizione live, catturata dall\'app',
+               state.origine==='scatto'?null:'immagine da archivio');
+  h += riga(state.doppio?'si':'no',
+            'Due riferimenti su oggetti distinti',
+            state.doppio?null:'un solo riferimento');
+  if(esito && esito.verifica_doppio_riferimento==='superata')
+    h += riga('si','Le due scale concordano',`divergenza ${esito.divergenza_mm_px} ≤ soglia ${esito.soglia_mm_px} mm/px`);
+  else if(esito && esito.tipo==='RifiutoMotivato' && esito.divergenza_mm_px)
+    h += riga('no','Le due scale concordano',`divergenza ${esito.divergenza_mm_px} > soglia ${esito.soglia_mm_px} mm/px`);
+  else
+    h += riga(state.doppio?'attesa':'no','Le due scale concordano',
+              state.doppio?'si verifica al momento della misura':'non verificabile con un solo riferimento');
+  cond.innerHTML=h;
+}
 
-  // percorso ArUco: rilevamento opencv sul server locale
-  const corpo={ id:state.id, punti:state.punti, modalita,
-    tolleranza_mm:parseFloat($('#tolreq').value), sigma_seg_px:parseFloat($('#sigmaseg').value),
-    riferimento:{tipo, lato_mm:parseFloat($('#lato').value)} };
-  if(tipo==='non_verificato') corpo.riferimento.frazione=parseFloat($('#toll').value);
-  else corpo.riferimento.tolleranza_mm=parseFloat($('#toll').value);
+// Il calcolo e' interamente CLIENT-ONLY: `core.js`, nessuna richiesta di rete,
+// nessun server. L'immagine non lascia il dispositivo perche' non va da nessuna
+// parte — non perche' qualcuno promette di non guardarla.
+const lungPx=(a,b)=>Math.hypot(b[0]-a[0],b[1]-a[1]);
+btn.addEventListener('click',()=>{
+  err.hidden=true;
+  const tolleranzaMm=parseFloat($('#tolreq').value);
+  const sigmaSegPx=parseFloat($('#sigmaseg').value);
+  let esito;
   try{
-    const res=await fetch('/api/misura',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
-    const d=await res.json();
-    if(!res.ok){ err.hidden=false; err.textContent=d.errore||'errore'; }
-    else renderEsito(d);
-  }catch(e){ err.hidden=false; err.textContent='errore di rete'; }
-  btn.textContent='Misura'; aggiornaBottone();
+    if(state.doppio){
+      esito=window.MisuraCore.misuraDoppioRiferimento({
+        tipoA:$('#tipoA').value, latoPersonalizzatoA:parseFloat($('#latoA').value),
+        latoRifAPx:lungPx(...state.rifA),
+        tipoB:$('#tipoB').value, latoPersonalizzatoB:parseFloat($('#latoB').value),
+        latoRifBPx:lungPx(...state.rifB),
+        latoTargetPx:lungPx(...state.punti), sigmaSegPx, tolleranzaMm });
+    } else {
+      esito=window.MisuraCore.misuraManuale({
+        tipo:$('#tipoA').value, latoPersonalizzato:parseFloat($('#latoA').value),
+        latoRifPx:lungPx(...state.rifA),
+        latoTargetPx:lungPx(...state.punti), sigmaSegPx, tolleranzaMm });
+    }
+  }catch(e){ err.hidden=false; err.textContent=e.message||String(e); return; }
+  esito.modalita=modalitaCorrente();
+  renderEsito(esito);
+  aggiornaModo(esito);
 });
 
 function gauge(U,T){ const m=Math.max(T,U)*1.3; return {b:50-T/m*50, u:50-U/m*50}; }
@@ -446,10 +587,13 @@ function renderEsito(d){
   const modChip = d.modalita==='certificata'?'<span class="chip cert">Certificata</span>':'<span class="chip stima">Stima</span>';
   const box=$('#esito'); let h='';
   if(d.tipo==='RifiutoMotivato'){
+    const verifica = d.divergenza_mm_px
+      ? `<div class="meta"><div><div class="k">Divergenza fra le due scale</div><div class="v">${d.divergenza_mm_px} mm/px</div></div>
+         <div><div class="k">Soglia di compatibilità (k=2)</div><div class="v">${d.soglia_mm_px} mm/px</div></div></div>` : '';
     h=`<div class="card crit no-number"><div class="card-head"><span class="pill crit"><span class="dot"></span>Non misurabile</span>${modChip}</div>
       <div class="readout"><span class="val">—</span></div>
       <div class="refusal">Nessun numero difendibile.</div>
-      <div class="callout crit"><span class="ic">!</span><span>${d.motivo}</span></div></div>`;
+      <div class="callout crit"><span class="ic">!</span><span>${d.motivo}</span></div>${verifica}</div>`;
   } else {
     const good=d.tipo==='EntroTolleranza', cls=good?'good':'warn';
     const g=gauge(d.incertezza_espansa_mm,d.tolleranza_mm);
@@ -464,7 +608,12 @@ function renderEsito(d){
     if(!good) h+=`<div class="callout"><span class="ic">→</span><span>${d.come_migliorare}</span></div>`;
     h+=`<div class="meta"><div><div class="k">Provenienza</div><div class="v">${d.provenienza}</div></div>
       <div><div class="k">Scala</div><div class="v">${d.scala_mm_px} ± ${d.scala_inc_mm_px} mm/px</div></div>
-      <div><div class="k">Target</div><div class="v">${d.lato_target_px} px</div></div></div></div>`;
+      <div><div class="k">Target</div><div class="v">${d.lato_target_px} px</div></div>`;
+    // che la verifica sia stata superata e' un'informazione SUL DATO: e' cio' che
+    // distingue una scala verificata da una semplicemente dichiarata
+    if(d.verifica_doppio_riferimento==='superata')
+      h+=`<div><div class="k">Doppio riferimento</div><div class="v">verificato · ${d.divergenza_mm_px} ≤ ${d.soglia_mm_px} mm/px</div></div>`;
+    h+=`</div></div>`;
   }
   box.innerHTML=h; box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -485,7 +634,6 @@ function mostra(){
 window.addEventListener('hashchange',mostra);
 navback.addEventListener('click',()=>vai('home'));
 document.querySelectorAll('.task[data-go]').forEach(b=>b.addEventListener('click',()=>vai(b.dataset.go)));
-aggiornaTipo();
 mostra();
 
 // --- service worker: offline, nessuna rete a runtime ---
