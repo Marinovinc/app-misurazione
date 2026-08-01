@@ -174,22 +174,48 @@ def _scheda(esito: object, extra: dict[str, Any]) -> dict[str, Any]:
     return base
 
 
+def _riferimento_manuale(spec: dict[str, Any]) -> Riferimento:
+    tipo = spec.get("tipo", "id1_lungo")
+    if tipo == "id1_lungo":
+        return Riferimento(85.60, 0.10, "carta ID-1, lato lungo")
+    if tipo == "id1_corto":
+        return Riferimento(53.98, 0.10, "carta ID-1, lato corto")
+    if tipo == "personalizzato":
+        return Riferimento(
+            float(spec["lato_mm"]), float(spec.get("tolleranza_mm", 0.5)), "dimensione nota"
+        )
+    raise ValueError(f"riferimento manuale sconosciuto: {tipo!r}")
+
+
 @app.post("/api/misura")
 def misura() -> Any:
     corpo = request.get_json(force=True)
-    analisi = _ANALISI.get(corpo.get("id", ""))
     modalita = _modalita(corpo.get("modalita", "stima"))
     tolleranza = Tolleranza(semiampiezza=float(corpo.get("tolleranza_mm", 20.0)))
     prov = MisurataDaApp(modalita)
+    tag_mod = corpo.get("modalita", "stima")
 
-    if analisi is None:
-        # nessun riferimento rilevato: la regola dell'occluso decide per modalita'
-        esito = gestisci_riferimento_occluso(modalita, prov, tolleranza)
-        return jsonify(_scheda(esito, {"modalita": corpo.get("modalita", "stima")}))
-
-    riferimento = _riferimento(corpo["riferimento"])
-    sigma_lato = 0.5 * math.sqrt(2.0) / 2.0
-    scala = scala_da_lato_pixel(riferimento, float(analisi["lato_px"]), sigma_lato)
+    punti_rif = corpo.get("riferimento_punti")
+    if punti_rif:
+        # riferimento a clic manuale: la scala viene da due punti di lunghezza nota.
+        # Cliccare a mano e' meno preciso della rilevazione sub-pixel dell'ArUco,
+        # quindi sigma piu' larga -> incertezza dichiarata piu' larga (§5.2, livello stima).
+        riferimento = _riferimento_manuale(corpo.get("riferimento", {}))
+        (rx1, ry1), (rx2, ry2) = punti_rif
+        lato_rif_px = math.hypot(float(rx2) - float(rx1), float(ry2) - float(ry1))
+        if lato_rif_px <= 0.0:
+            return jsonify({"errore": "i due punti del riferimento coincidono"}), 400
+        sigma_rif = float(corpo.get("sigma_rif_px", 2.5))
+        scala = scala_da_lato_pixel(riferimento, lato_rif_px, sigma_rif)
+    else:
+        analisi = _ANALISI.get(corpo.get("id", ""))
+        if analisi is None:
+            esito = gestisci_riferimento_occluso(modalita, prov, tolleranza)
+            return jsonify(_scheda(esito, {"modalita": tag_mod}))
+        riferimento = _riferimento(corpo["riferimento"])
+        lato_rif_px = float(analisi["lato_px"])
+        sigma_lato = 0.5 * math.sqrt(2.0) / 2.0
+        scala = scala_da_lato_pixel(riferimento, lato_rif_px, sigma_lato)
 
     (x1, y1), (x2, y2) = corpo["punti"]
     lato_target_px = math.hypot(float(x2) - float(x1), float(y2) - float(y1))
@@ -202,11 +228,11 @@ def misura() -> Any:
         _scheda(
             esito,
             {
-                "modalita": corpo.get("modalita", "stima"),
+                "modalita": tag_mod,
                 "provenienza": "Misurata dall'app",
                 "scala_mm_px": round(scala.valore, 4),
                 "scala_inc_mm_px": round(scala.deviazione, 4),
-                "lato_rif_px": round(float(analisi["lato_px"]), 1),
+                "lato_rif_px": round(lato_rif_px, 1),
                 "lato_target_px": round(lato_target_px, 1),
             },
         )
