@@ -19,7 +19,7 @@ from typing import Any
 
 import cv2
 import numpy as np
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 
 from misura.esito import (
     EntroTolleranza,
@@ -44,7 +44,11 @@ from misura.riferimento import (
 )
 
 app = Flask(__name__)
-_INDEX = Path(__file__).parent / "index.html"
+_QUI = Path(__file__).parent
+_INDEX = _QUI / "index.html"
+_MANIFEST = _QUI / "manifest.webmanifest"
+_SW = _QUI / "sw.js"
+_ICON = _QUI / "icon-512.png"
 
 # store in memoria: id immagine -> angoli del marker + lato in pixel
 _ANALISI: dict[str, dict[str, Any]] = {}
@@ -80,6 +84,25 @@ def _modalita(tag: str) -> Modalita:
 def index() -> str:
     # letta a ogni richiesta: in sviluppo basta un refresh, niente restart
     return _INDEX.read_text(encoding="utf-8")
+
+
+@app.get("/manifest.webmanifest")
+def manifest() -> Any:
+    return app.response_class(
+        _MANIFEST.read_text(encoding="utf-8"), mimetype="application/manifest+json"
+    )
+
+
+@app.get("/sw.js")
+def service_worker() -> Any:
+    return app.response_class(
+        _SW.read_text(encoding="utf-8"), mimetype="application/javascript"
+    )
+
+
+@app.get("/icon-512.png")
+def icona() -> Any:
+    return send_file(_ICON, mimetype="image/png")
 
 
 @app.post("/api/analizza")

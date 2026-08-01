@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>app-misurazione · misura interattiva</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0b7f93">
 <style>
   :root {
     --bg:#eef1f2; --surface:#fff; --surface-2:#f6f8f9; --ink:#0f171c; --muted:#5c6b72;
@@ -27,6 +29,24 @@
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;}
   .wrap{max-width:1060px;margin:0 auto;padding:clamp(18px,3vw,36px) 20px 64px;}
+  .topnav{display:flex;align-items:center;gap:12px;margin-bottom:10px;min-height:30px;}
+  .navback{background:none;border:1px solid var(--line-strong);color:var(--muted);border-radius:7px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer;}
+  .navback:hover{border-color:var(--accent);color:var(--accent-ink);}
+  .navtitle{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);}
+  .screen[hidden]{display:none;}
+  .home-h{font-size:clamp(22px,4vw,30px);margin:14px 0 4px;font-weight:640;letter-spacing:-.01em;text-wrap:balance;}
+  .home-sub{color:var(--muted);font-size:14.5px;margin:0 0 22px;max-width:60ch;}
+  .tasks{display:grid;grid-template-columns:1fr;gap:14px;}
+  @media(min-width:720px){.tasks{grid-template-columns:1fr 1fr;}}
+  .task{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:var(--shadow);cursor:pointer;font:inherit;color:var(--ink);transition:border-color .15s,transform .08s;}
+  .task:hover{border-color:var(--accent);}
+  .task:active{transform:translateY(1px);}
+  .task h3{margin:0 0 8px;font-size:17px;font-weight:640;display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+  .task p{margin:0;color:var(--muted);font-size:13.5px;}
+  .badge{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--line-strong);color:var(--muted);}
+  .badge.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent);}
+  .placeholder{background:var(--surface);border:1px dashed var(--line-strong);border-radius:14px;padding:28px 22px;color:var(--muted);}
+  .placeholder h2{margin:0 0 8px;color:var(--ink);font-size:19px;}
   .brand{font-family:var(--mono);font-weight:600;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);}
   h1{font-size:clamp(21px,3.4vw,27px);margin:4px 0 0;font-weight:640;letter-spacing:-.01em;}
   .sub{color:var(--muted);font-size:14px;margin:6px 0 0;max-width:66ch;}
@@ -116,6 +136,24 @@
 </head>
 <body>
 <div class="wrap">
+  <nav class="topnav"><button class="navback" id="navback" hidden>‹ indietro</button><span class="navtitle" id="navtitle">app-misurazione</span></nav>
+
+  <section class="screen" id="screen-home">
+    <h2 class="home-h">Cosa vuoi misurare?</h2>
+    <p class="home-sub">Ogni valore che vedrai porta la sua provenienza e la sua incertezza. Dove non c'è una fonte reale, il campo resta vuoto — mai un numero di riempimento.</p>
+    <div class="tasks">
+      <button class="task" data-go="oggetto">
+        <h3>Misura oggetto planare <span class="badge ok">funziona</span></h3>
+        <p>Foto con un marker ArUco accanto a un oggetto piatto. Usa il nucleo di misura reale, con incertezza ed esito.</p>
+      </button>
+      <button class="task" data-go="corpo">
+        <h3>Misure corporee <span class="badge">input manuale</span></h3>
+        <p>Manichino con le linee di misura. In questa fase i valori sono solo quelli che inserisci tu, marcati come tali — nessuna misura corporea è calcolata.</p>
+      </button>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-oggetto" hidden>
   <header>
     <div class="brand">app-misurazione</div>
     <h1>Misura interattiva</h1>
@@ -184,6 +222,14 @@
   <div id="esito"></div>
 
   <p class="foot"><b>App locale, fase 1.</b> Prima UI sopra il nucleo di fase 0. Il riferimento ArUco è rilevato davvero; i bordi del target sono i tuoi due click (la segmentazione automatica è fase successiva). Nessun dato lascia la tua macchina.</p>
+  </section>
+
+  <section class="screen" id="screen-corpo" hidden>
+    <div class="placeholder">
+      <h2>Manichino — in arrivo</h2>
+      <p>Le linee di misura sul corpo e l'inserimento manuale con provenienza e incertezza (§9.2) arrivano al passo 4 della fase 1a. Nessun numero corporeo viene inventato: i campi senza fonte restano vuoti e visibilmente vuoti.</p>
+    </div>
+  </section>
 </div>
 
 <script>
@@ -324,6 +370,27 @@ function renderEsito(d){
   }
   box.innerHTML=h; box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
+
+// --- router a hash + navigazione tra schermi ---
+const schermi={home:'screen-home',oggetto:'screen-oggetto',corpo:'screen-corpo'};
+const navback=$('#navback'), navtitle=$('#navtitle');
+const titoli={home:'app-misurazione',oggetto:'Misura oggetto',corpo:'Misure corporee'};
+function vai(nome){ location.hash = nome==='home' ? '' : '#/'+nome; }
+function mostra(){
+  const richiesto=(location.hash.replace('#/','')||'home');
+  const attivo=schermi[richiesto]?richiesto:'home';
+  Object.entries(schermi).forEach(([k,id])=>{ document.getElementById(id).hidden=(k!==attivo); });
+  navback.hidden=(attivo==='home');
+  navtitle.textContent=titoli[attivo];
+  window.scrollTo(0,0);
+}
+window.addEventListener('hashchange',mostra);
+navback.addEventListener('click',()=>vai('home'));
+document.querySelectorAll('.task[data-go]').forEach(b=>b.addEventListener('click',()=>vai(b.dataset.go)));
+mostra();
+
+// --- service worker: offline, nessuna rete a runtime ---
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
 </script>
 </body>
 </html>
