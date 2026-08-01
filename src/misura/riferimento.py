@@ -79,10 +79,21 @@ def marker_stampato_verificato(lato_mm: float, tolleranza_mm: float = 0.2) -> Ri
 
 
 def rileva_marker(immagine: Immagine, dizionario: int | None = None) -> Vettore:
-    """Rileva il primo marker ArUco e restituisce i suoi 4 angoli (x, y) in pixel."""
+    """Rileva il primo marker ArUco e restituisce i suoi 4 angoli (x, y) in pixel.
+
+    Parametri piu' permissivi del default per reggere foto reali (webcam, marker
+    piccolo o lontano, illuminazione varia) e rifinitura sub-pixel degli angoli
+    per la precisione della scala.
+    """
     codice = cv2.aruco.DICT_4X4_50 if dizionario is None else dizionario
     vocabolario = cv2.aruco.getPredefinedDictionary(codice)
-    rilevatore = cv2.aruco.ArucoDetector(vocabolario, cv2.aruco.DetectorParameters())
+    parametri = cv2.aruco.DetectorParameters()
+    parametri.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+    parametri.minMarkerPerimeterRate = 0.02  # marker piu' piccoli/lontani (default 0.03)
+    parametri.adaptiveThreshWinSizeMin = 3
+    parametri.adaptiveThreshWinSizeMax = 43
+    parametri.adaptiveThreshWinSizeStep = 10
+    rilevatore = cv2.aruco.ArucoDetector(vocabolario, parametri)
     angoli, ids, _ = rilevatore.detectMarkers(immagine)
     if ids is None or len(angoli) == 0:
         raise RiferimentoNonTrovato("nessun marker ArUco rilevato")
