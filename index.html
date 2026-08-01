@@ -79,8 +79,37 @@
   .cam{margin-top:12px;}
   .camwrap{position:relative;line-height:0;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#000;}
   .camwrap video{width:100%;height:auto;display:block;}
-  .camguide{position:absolute;top:50%;left:50%;width:min(62%,220px);aspect-ratio:1;transform:translate(-50%,-50%);border:2px dashed rgba(255,255,255,.9);border-radius:10px;pointer-events:none;}
   .camhint{font-size:12.5px;color:var(--muted);margin:8px 0 0;text-align:center;text-wrap:balance;}
+  .camsel{display:flex;gap:10px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--muted);}
+  .camsel[hidden]{display:none;}
+  .camsel select{flex:1;font-size:13px;padding:6px 8px;}
+  .camres{font-family:var(--mono);font-size:11.5px;color:var(--faint);text-align:center;margin:6px 0 0;}
+  /* barra dei passi: dove sei, cosa manca */
+  .passi{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:18px 0 20px;padding:0;}
+  .passi li{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--faint);background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:5px 13px 5px 6px;}
+  .passi .n{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--surface-2);
+    border:1px solid var(--line-strong);font-family:var(--mono);font-size:11px;color:var(--faint);}
+  .passi li.fatto{color:var(--good);border-color:color-mix(in srgb,var(--good) 35%,transparent);}
+  .passi li.fatto .n{background:var(--good);border-color:var(--good);color:#fff;font-size:12px;}
+  .passi li.corrente{color:var(--ink);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface));font-weight:640;}
+  .passi li.corrente .n{background:var(--accent);border-color:var(--accent);color:#fff;}
+  :root[data-theme="dark"] .passi li.corrente .n,:root[data-theme="dark"] .passi li.fatto .n{color:#06222a;}
+  .passi li.saltato{opacity:.45;text-decoration:line-through;}
+
+  /* istruzione corrente: grande e sopra l'immagine, non un grigetto in fondo */
+  .ora{display:flex;align-items:center;gap:12px;padding:13px 15px;margin-bottom:14px;border-radius:10px;
+    background:color-mix(in srgb,var(--accent) 8%,var(--surface-2));border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);}
+  .ora[hidden]{display:none;}
+  .ora .pallino{width:14px;height:14px;border-radius:50%;flex:none;background:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 20%,transparent);}
+  .ora-txt{flex:1;min-width:0;}
+  .ora-txt b{display:block;font-size:15px;line-height:1.3;}
+  .ora-txt small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px;}
+
+  .manca{font-size:12.5px;color:var(--muted);margin:9px 0 0;}
+  .manca[hidden]{display:none;}
+  .manca b{color:var(--ink);}
+  .hint button.ghost{margin-left:2px;}
   .cam-actions{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;}
   .cam-actions .go{margin-top:0;flex:1;min-width:140px;}
   @media(max-width:430px){.row{grid-template-columns:1fr;}}
@@ -209,16 +238,22 @@
     <p class="sub">Tutto il calcolo gira su questo dispositivo: nessuna immagine esce, nessuna rete. Il valore esce sempre con la sua incertezza e la sua provenienza — e se la scala non è verificabile non esce nessun numero.</p>
   </header>
 
-  <details class="guida" open>
-    <summary>Come si usa — guida rapida</summary>
+  <ol class="passi" id="passi">
+    <li data-p="immagine"><span class="n">1</span>Immagine</li>
+    <li data-p="rifA"><span class="n">2</span>Riferimento A</li>
+    <li data-p="rifB"><span class="n">3</span>Riferimento B</li>
+    <li data-p="target"><span class="n">4</span>Oggetto</li>
+    <li data-p="misura"><span class="n">5</span>Misura</li>
+  </ol>
+
+  <details class="guida">
+    <summary>Prima di iniziare — cosa serve e perché</summary>
     <ol>
-      <li><b>Ti serve un riferimento di dimensione nota</b> accanto all'oggetto e sullo <b>stesso piano</b>: una tessera ID-1 (bancomat, fedeltà, trasporti — 85,60 × 53,98 mm in tutto il mondo) o una dimensione che leggi col righello. Senza, l'app non può conoscere la scala.</li>
-      <li><b>Scegli come arriva l'immagine.</b> Scattare qui dentro è l'unico caso in cui l'app può affermare che l'acquisizione è live; una foto dall'archivio resta stima.</li>
-      <li><b>Clicca i due estremi del riferimento</b>, poi quelli dell'oggetto da misurare.</li>
-      <li><b>Con due riferimenti distinti</b> l'app confronta le due scale che ne ricava: se non concordano te lo dice invece di darti un numero, e se concordano l'incertezza si stringe.</li>
-      <li>Leggi il risultato: <b>valore ± incertezza</b> e l'esito — entro tolleranza, fuori tolleranza, oppure non misurabile.</li>
+      <li><b>Un riferimento di dimensione nota</b>, appoggiato <b>accanto all'oggetto e sullo stesso piano</b>: una tessera ID-1 (bancomat, fedeltà, trasporti — 85,60 × 53,98 mm in tutto il mondo) o qualcosa che misuri col righello. Senza, l'app non può conoscere la scala: una foto da sola non contiene informazioni metriche.</li>
+      <li><b>Meglio due riferimenti</b>, su <b>oggetti distinti</b>. Con due, l'app calcola due scale e le confronta: se non concordano te lo dice invece di darti un numero sbagliato, e se concordano l'incertezza si stringe. È anche la condizione per la modalità certificata.</li>
+      <li><b>Un oggetto piatto</b>, o la cui misura giace sul piano del riferimento. L'app misura contorni planari, non le tre dimensioni di un solido.</li>
     </ol>
-    <p class="guida-tip"><b>Il riferimento va sul piano che stai misurando.</b> Tenuto in mano, o più vicino alla fotocamera dell'oggetto, produce un errore di scala sistematico che nessuna incertezza dichiarata cattura. Su superfici curve la tessera è tangente al piano e la sua proiezione è distorta.</p>
+    <p class="guida-tip"><b>L'errore più facile da fare.</b> Il riferimento tenuto in mano, o comunque più vicino alla fotocamera dell'oggetto, produce un errore di scala sistematico — di solito qualche percento — che <b>nessuna incertezza dichiarata cattura</b>, perché non è rumore ma un bias. Appoggialo sullo stesso piano. Su superfici curve la tessera è tangente al piano e la sua proiezione è distorta.</p>
   </details>
 
   <!-- 1 · acquisizione: e' la porta a determinare la modalita' -->
@@ -238,8 +273,13 @@
       <input type="file" id="file" accept="image/*">
 
       <div class="cam" id="cam" hidden>
-        <div class="camwrap"><video id="video" autoplay playsinline muted></video><div class="camguide"></div></div>
-        <p class="camhint">Inquadra l'oggetto con i riferimenti appoggiati sullo stesso piano</p>
+        <div class="camwrap"><video id="video" autoplay playsinline muted></video></div>
+        <p class="camhint"><b>Inquadra tutta la scena</b> — l'oggetto e i riferimenti devono starci per intero, appoggiati sullo stesso piano. Allontanati finché ci sta tutto.</p>
+        <p class="camres" id="camres"></p>
+        <div class="camsel" id="camsel" hidden>
+          <label for="selCam">fotocamera</label>
+          <select id="selCam"></select>
+        </div>
         <div class="cam-actions">
           <button class="go" id="capture">Cattura fotogramma</button>
           <button class="ghost" id="camClose">annulla</button>
@@ -259,6 +299,11 @@
     <section class="panel">
       <div class="panel-h"><span>2 · Riferimenti e target</span><button class="ghost" id="reset" hidden>azzera punti</button></div>
       <div class="panel-b">
+        <div class="ora" id="ora" hidden>
+          <span class="pallino" id="oraPallino"></span>
+          <div class="ora-txt"><b id="oraT"></b><small id="oraS"></small></div>
+          <button class="ghost" id="oraAzione" hidden></button>
+        </div>
         <div class="stage" id="stage">
           <div class="imgwrap"><img id="img" alt="immagine acquisita"><svg id="ov" preserveAspectRatio="xMidYMid meet"></svg></div>
         </div>
@@ -307,6 +352,7 @@
           <div class="field"><label for="sigmaseg">Incertezza clic (px)</label><input type="number" id="sigmaseg" value="1" min="0" step="0.5"></div>
         </div>
         <button class="go" id="misura" disabled>Misura</button>
+        <p class="manca" id="manca" hidden></p>
         <div class="err" id="err" hidden></div>
       </div>
     </section>
@@ -381,8 +427,13 @@ function impostaOrigine(o){
 chkDoppio.addEventListener('change',()=>{
   state.doppio=chkDoppio.checked;
   rifBoxB.hidden=!state.doppio;
-  azzeraPunti();
-  aggiornaModo();
+  state.rifB=[];
+  // non si ricomincia da capo: i clic gia' fatti sul riferimento A restano, e
+  // si prosegue da dove si era. Perdere il lavoro fatto per aver cambiato idea
+  // sulla verifica e' il modo piu' rapido di rendere la verifica antipatica.
+  state.fase = state.rifA.length===2 ? (state.doppio?'rifB':'target') : 'rifA';
+  $('#esito').innerHTML=''; err.hidden=true;
+  render(); aggiornaBottone(); aggiornaHint(); aggiornaModo();
 });
 
 ricomincia.addEventListener('click',()=>{
@@ -391,7 +442,7 @@ ricomincia.addEventListener('click',()=>{
   portaScatto.setAttribute('aria-pressed','false');
   portaArchivio.setAttribute('aria-pressed','false');
   file.value=''; img.removeAttribute('src'); stage.classList.remove('show');
-  hint.hidden=true; $('#esito').innerHTML=''; err.hidden=true;
+  hint.hidden=true; $('#ora').hidden=true; $('#esito').innerHTML=''; err.hidden=true;
   ricomincia.hidden=true; modo.hidden=true;
   azzeraPunti();
 });
@@ -399,17 +450,46 @@ ricomincia.addEventListener('click',()=>{
 // --- cattura in-app (getUserMedia). Il flusso video non lascia la pagina: il
 // fotogramma finisce in un canvas locale e da li' nel calcolo, senza rete. ---
 const cam=$('#cam'), video=$('#video'), capture=$('#capture'), camClose=$('#camClose');
+const camres=$('#camres'), camsel=$('#camsel'), selCam=$('#selCam');
 let stream=null;
-async function apriCam(){
+async function apriCam(deviceId){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
     setHint('⚠ fotocamera non disponibile in questo browser: resta la scelta da archivio'); return;
   }
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  // NIENTE height. Chiedere 1920x1080 a un sensore 4:3 lo fa **ritagliare in
+  // verticale**: e' cosi' che si finisce a inquadrare il viso invece della
+  // scena intera. Chiediamo larghezza alta e lasciamo che sia il dispositivo a
+  // scegliere il formato, che e' quello col campo visivo piu' ampio.
+  const vincoli = deviceId
+    ? {deviceId:{exact:deviceId}, width:{ideal:4096}}
+    : {facingMode:{ideal:'environment'}, width:{ideal:4096}};
   try{
-    stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    stream=await navigator.mediaDevices.getUserMedia({video:vincoli});
     video.srcObject=stream; cam.hidden=false;
+    video.addEventListener('loadedmetadata',()=>{
+      camres.textContent=`fotogramma ${video.videoWidth}×${video.videoHeight} px`;
+    },{once:true});
+    await elencaFotocamere();
   }catch(e){ setHint('⚠ fotocamera non disponibile: '+(e.message||e.name)); }
 }
+
+// I nomi delle fotocamere sono leggibili solo dopo il consenso, quindi si
+// elencano a stream aperto. Con una sola fotocamera il selettore non serve.
+async function elencaFotocamere(){
+  if(!navigator.mediaDevices.enumerateDevices) return;
+  try{
+    const tutti=await navigator.mediaDevices.enumerateDevices();
+    const video_in=tutti.filter(d=>d.kind==='videoinput');
+    camsel.hidden = video_in.length<2;
+    if(video_in.length<2) return;
+    selCam.innerHTML=video_in.map((d,i)=>
+      `<option value="${d.deviceId}">${d.label||('fotocamera '+(i+1))}</option>`).join('');
+    const attiva=stream&&stream.getVideoTracks()[0].getSettings().deviceId;
+    if(attiva) selCam.value=attiva;
+  }catch(e){ camsel.hidden=true; }
+}
+selCam.addEventListener('change',()=>apriCam(selCam.value));
 function chiudiCam(){ if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;} cam.hidden=true; }
 camClose.addEventListener('click',chiudiCam);
 capture.addEventListener('click',()=>{
@@ -468,6 +548,41 @@ function aggiornaBottone(){
   // non lo e' piu', non produce un numero ma l'offerta esplicita di degrado
   btn.textContent = richiedeDegrado() ? 'Prosegui in stima…' : 'Misura';
   reset.hidden = !(state.rifA.length || state.rifB.length || state.punti.length);
+
+  // un bottone disabilitato senza spiegazione e' un vicolo cieco: dice cosa manca
+  const manca=[];
+  if(!state.dataUrl) manca.push("un'immagine");
+  if(state.rifA.length<2) manca.push('i 2 clic sul riferimento A');
+  if(state.doppio && state.rifB.length<2) manca.push('i 2 clic sul riferimento B');
+  if(state.punti.length<2) manca.push("i 2 clic sull'oggetto da misurare");
+  const nodo=$('#manca');
+  nodo.hidden = manca.length===0;
+  if(manca.length) nodo.innerHTML='Manca ancora: <b>'+manca.join('</b>, <b>')+'</b>.';
+  aggiornaPassi();
+}
+
+// Barra dei passi: dove sei nel percorso, e cosa e' gia' fatto.
+function aggiornaPassi(){
+  const fatto = {
+    immagine: !!state.dataUrl,
+    rifA: state.rifA.length===2,
+    rifB: state.doppio && state.rifB.length===2,
+    target: state.punti.length===2,
+    misura: !!$('#esito').querySelector('.card'),
+  };
+  const corrente = !state.dataUrl ? 'immagine'
+    : state.fase==='rifA' ? 'rifA'
+    : state.fase==='rifB' ? 'rifB'
+    : state.punti.length<2 ? 'target' : 'misura';
+
+  $('#passi').querySelectorAll('li').forEach(li=>{
+    const p=li.dataset.p;
+    li.className = p==='rifB' && !state.doppio ? 'saltato'
+      : fatto[p] && p!==corrente ? 'fatto'
+      : p===corrente ? 'corrente' : '';
+    li.querySelector('.n').textContent = (li.className==='fatto') ? '✓'
+      : ({immagine:'1',rifA:'2',rifB:'3',target:'4',misura:'5'})[p];
+  });
 }
 
 function descrizioneRif(sel){
@@ -476,11 +591,33 @@ function descrizioneRif(sel){
   if(t==='id1_corto') return 'lato corto della tessera · 53,98 mm';
   return 'la dimensione nota che hai indicato';
 }
+// L'istruzione del momento, grande e sopra l'immagine. Il pallino ha il colore
+// dei punti che stai per mettere, cosi' il legame col disegno e' immediato.
+const ora=$('#ora'), oraT=$('#oraT'), oraS=$('#oraS'), oraPallino=$('#oraPallino'), oraAzione=$('#oraAzione');
 function aggiornaHint(){
-  if(!state.dataUrl){ hint.hidden=true; return; }
-  if(state.fase==='rifA') setHint('clicca i 2 estremi del <b>riferimento A</b>', descrizioneRif('#tipoA'));
-  else if(state.fase==='rifB') setHint('clicca i 2 estremi del <b>riferimento B</b> — dev\'essere un <b>oggetto distinto</b> dal primo', descrizioneRif('#tipoB'));
-  else setHint('clicca i 2 estremi dell\'<b>oggetto da misurare</b>');
+  if(!state.dataUrl){ ora.hidden=true; return; }
+  ora.hidden=false; oraAzione.hidden=true;
+
+  if(state.fase==='rifA'){
+    oraPallino.style.background=colore('--accent');
+    oraT.textContent='Clicca i 2 estremi del riferimento A';
+    oraS.textContent='I due punti che delimitano '+descrizioneRif('#tipoA')+'. Clicca il più precisamente possibile: da questa distanza in pixel nasce tutta la scala.';
+  } else if(state.fase==='rifB'){
+    oraPallino.style.background=colore('--rifb');
+    oraT.textContent='Clicca i 2 estremi del riferimento B';
+    oraS.textContent='Dev\'essere un oggetto distinto dal primo — non l\'altro lato della stessa tessera, che condividerebbe piano e distorsione e concorderebbe anche sbagliando.';
+    oraAzione.hidden=false;
+    oraAzione.textContent='ne ho uno solo';
+    oraAzione.onclick=()=>{ chkDoppio.checked=false; chkDoppio.dispatchEvent(new Event('change')); };
+  } else {
+    oraPallino.style.background=colore('--warn');
+    oraT.textContent='Clicca i 2 estremi dell\'oggetto da misurare';
+    oraS.textContent='La misura che ti serve, sullo stesso piano del riferimento. Poi premi il bottone in fondo.';
+    if(state.punti.length===2){
+      oraT.textContent='Tutto pronto: premi Misura';
+      oraS.textContent='Puoi ancora correggere qualsiasi punto ricliccando, o azzerare tutto.';
+    }
+  }
 }
 
 // il campo "dimensione (mm)" esiste solo dove serve: per i formati normati la
