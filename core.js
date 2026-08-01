@@ -81,6 +81,62 @@ function valuta(misura, semiampiezzaMm, coperturaK) {
   };
 }
 
+// --- doppio riferimento: la scala VERIFICATA, non dichiarata (§5.3) -----------
+// Due riferimenti in inquadratura -> due scale -> si confrontano. La soglia non
+// e' un numero scelto a mano: le due scale sono grandezze incerte e la loro
+// differenza propaga da se' le sorgenti, incluse quelle condivise. Sono
+// compatibili se |s1-s2| <= k*u(s1-s2) — il test GUM, con lo stesso k=2
+// dell'incertezza espansa.
+//
+// Concordi, si FONDONO (GLS): la scala risultante e' piu' stretta di entrambe,
+// quindi la verifica non costa precisione, la produce.
+// Discordi, si rifiuta l'INTERA misura: `ScaleDiscordi` non espone nessuna scala,
+// perche' sapere che una delle due e' sbagliata senza sapere quale non autorizza
+// a proseguire con una delle due.
+const COPERTURA_COMPATIBILITA_K = 2.0;
+
+function covarianza(a, b) {
+  let s = 0;
+  for (const [sorgente, ca] of a.termini) {
+    const cb = b.termini.get(sorgente);
+    if (cb !== undefined) s += ca * cb;
+  }
+  return s;
+}
+
+function _motivoDiscordi(prima, seconda, divergenza, soglia, k) {
+  return `i due riferimenti danno scale che non concordano: `
+    + `${prima.valore.toFixed(4)} e ${seconda.valore.toFixed(4)} mm/px, `
+    + `divergenza ${divergenza.toFixed(4)} oltre la soglia di compatibilita' `
+    + `${soglia.toFixed(4)} (k=${k}). Una delle due e' sbagliata e non e' possibile `
+    + `sapere quale: rifare lo scatto con entrambi i riferimenti complanari all'oggetto`;
+}
+
+function confrontaScale(prima, seconda, coperturaK) {
+  const k = coperturaK ?? COPERTURA_COMPATIBILITA_K;
+  if (k <= 0) throw new Error('il fattore di copertura dev\'essere positivo');
+
+  const differenza = prima.sub(seconda);
+  const divergenza = Math.abs(differenza.valore);
+  const soglia = k * differenza.deviazione;
+
+  if (divergenza > soglia) {
+    return { tipo: 'ScaleDiscordi', prima, seconda, divergenza, soglia,
+             motivo: _motivoDiscordi(prima, seconda, divergenza, soglia, k) };
+  }
+  // differenza a varianza nulla: la stessa grandezza scritta due volte, non due
+  // osservazioni. Fonderla sarebbe mal posto e non aggiungerebbe informazione.
+  if (differenza.varianza === 0) {
+    return { tipo: 'ScaleConcordi', scala: prima, divergenza, soglia };
+  }
+  // GLS a due: pesi = Sigma^-1 1 / (1' Sigma^-1 1). In forma chiusa il
+  // denominatore e' proprio la varianza della differenza (v1+v2-2c).
+  const v1 = prima.varianza, v2 = seconda.varianza, c = covarianza(prima, seconda);
+  const denom = v1 + v2 - 2 * c;
+  const fusa = prima.mul((v2 - c) / denom).add(seconda.mul((v1 - c) / denom));
+  return { tipo: 'ScaleConcordi', scala: fusa, divergenza, soglia };
+}
+
 // dimensioni note dei riferimenti a clic (mm), con tolleranza dimensionale
 function riferimentoManuale(tipo, latoPersonalizzato) {
   if (tipo === 'id1_lungo') return { latoMm: 85.60, tolleranzaMm: 0.10 };
@@ -104,4 +160,41 @@ function misuraManuale(opts) {
   return esito;
 }
 
-window.MisuraCore = { GrandezzaIncerta, scalaDaLatoPixel, misuraDaScala, valuta, misuraManuale };
+// misura con DUE riferimenti: la scala passa prima dalla verifica di §5.3.
+// Se i due riferimenti non concordano non esce un numero, esce un rifiuto.
+function misuraDoppioRiferimento(opts) {
+  const rifA = riferimentoManuale(opts.tipoA, opts.latoPersonalizzatoA);
+  const rifB = riferimentoManuale(opts.tipoB, opts.latoPersonalizzatoB);
+  const sigmaRif = opts.sigmaRifPx ?? 2.5;
+  const prima = scalaDaLatoPixel(rifA.latoMm, rifA.tolleranzaMm, opts.latoRifAPx, sigmaRif);
+  const seconda = scalaDaLatoPixel(rifB.latoMm, rifB.tolleranzaMm, opts.latoRifBPx, sigmaRif);
+
+  const confronto = confrontaScale(prima, seconda, opts.coperturaK);
+  if (confronto.tipo === 'ScaleDiscordi') {
+    return {
+      tipo: 'RifiutoMotivato',
+      motivo: confronto.motivo,
+      divergenza_mm_px: confronto.divergenza.toFixed(4),
+      soglia_mm_px: confronto.soglia.toFixed(4),
+      provenienza: "Misurata dall'app",
+    };
+  }
+
+  const misura = misuraDaScala(confronto.scala, opts.latoTargetPx, opts.sigmaSegPx ?? 1.0);
+  const esito = valuta(misura, opts.tolleranzaMm, 2.0);
+  esito.scala_mm_px = confronto.scala.valore.toFixed(4);
+  esito.scala_inc_mm_px = confronto.scala.deviazione.toFixed(4);
+  esito.lato_target_px = opts.latoTargetPx.toFixed(1);
+  esito.provenienza = "Misurata dall'app";
+  // la verifica superata e' un'informazione SUL DATO, non un dettaglio interno:
+  // e' cio' che distingue una scala verificata da una dichiarata.
+  esito.verifica_doppio_riferimento = 'superata';
+  esito.divergenza_mm_px = confronto.divergenza.toFixed(4);
+  esito.soglia_mm_px = confronto.soglia.toFixed(4);
+  return esito;
+}
+
+window.MisuraCore = {
+  GrandezzaIncerta, scalaDaLatoPixel, misuraDaScala, valuta, misuraManuale,
+  confrontaScale, misuraDoppioRiferimento, COPERTURA_COMPATIBILITA_K,
+};
