@@ -35,7 +35,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 disallow_any_explicit = false
 files = ["src", "tests"]
-mypy_path = "src"
+mypy_path = ["src", "tests"]
 
 [[tool.mypy.overrides]]
 module = ["cv2.*"]
