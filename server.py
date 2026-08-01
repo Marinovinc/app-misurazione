@@ -100,6 +100,13 @@ def service_worker() -> Any:
     )
 
 
+@app.get("/core.js")
+def core_js() -> Any:
+    return app.response_class(
+        (_QUI / "core.js").read_text(encoding="utf-8"), mimetype="application/javascript"
+    )
+
+
 @app.get("/icon-512.png")
 def icona() -> Any:
     return send_file(_ICON, mimetype="image/png")
