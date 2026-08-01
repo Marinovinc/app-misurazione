@@ -1,0 +1,31 @@
+{
+  "id": "campione-000",
+  "descrizione": "modello: sostituisci i valori e copia in campioni/<id>.json",
+  "percorso_immagine": "immagini/campione-000.png",
+  "riferimento": {
+    "lato_mm": 50.0,
+    "tolleranza_dim_mm": 0.2,
+    "descrizione": "marker ArUco stampato e verificato al calibro"
+  },
+  "target_px": {
+    "x1": 100.0,
+    "y1": 200.0,
+    "x2": 500.0,
+    "y2": 200.0,
+    "sigma_px": 1.0
+  },
+  "vero": {
+    "valore_mm": 100.0,
+    "incertezza_mm": 0.02
+  },
+  "modalita": "stima",
+  "scarti": {
+    "tenuti": 1,
+    "scarti": []
+  },
+  "metadati": {
+    "dispositivo": "",
+    "distanza_cm": "",
+    "note": ""
+  }
+}
