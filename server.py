@@ -44,7 +44,7 @@ from misura.riferimento import (
 )
 
 app = Flask(__name__)
-_PAGINA = (Path(__file__).parent / "index.html").read_text(encoding="utf-8")
+_INDEX = Path(__file__).parent / "index.html"
 
 # store in memoria: id immagine -> angoli del marker + lato in pixel
 _ANALISI: dict[str, dict[str, Any]] = {}
@@ -78,7 +78,8 @@ def _modalita(tag: str) -> Modalita:
 
 @app.get("/")
 def index() -> str:
-    return _PAGINA
+    # letta a ogni richiesta: in sviluppo basta un refresh, niente restart
+    return _INDEX.read_text(encoding="utf-8")
 
 
 @app.post("/api/analizza")
