@@ -21,6 +21,20 @@ Report del banco sintetico:
 .venv/Scripts/python -m misura.validazione.banco
 ```
 
+## App locale interattiva (fase 1)
+
+Prima UI sopra il nucleo: carichi una foto con un marker ArUco, clicchi i due
+estremi del target, e la misura viene calcolata dal vivo con incertezza ed esito.
+
+```bash
+.venv/Scripts/python -m pip install -e ".[app]"
+.venv/Scripts/python app/server.py
+# apri http://127.0.0.1:5000
+```
+
+Il riferimento ArUco e' rilevato davvero; i bordi del target sono i due click (la
+segmentazione automatica e' fase successiva). Nessun dato lascia la macchina.
+
 ## Nota di onestà (fase 0)
 
 Il banco sintetico verifica che la **propagazione dell'incertezza sia implementata

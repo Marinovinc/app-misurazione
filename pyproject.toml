@@ -20,6 +20,9 @@ dev = [
     "pytest>=8.0",
     "hypothesis>=6.100",
 ]
+app = [
+    "flask>=3.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -41,7 +44,14 @@ mypy_path = ["src", "tests"]
 module = ["cv2.*"]
 ignore_missing_imports = true
 
+# Il frontend (app/) e' una thin UI sopra il nucleo: non e' sotto il gate strict
+# del core. Il contratto tipizzato e' src/ + tests/.
+[[tool.mypy.overrides]]
+module = ["app.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = "-q"

@@ -23,6 +23,7 @@ import numpy.typing as npt
 from .grandezza import GrandezzaIncerta
 
 Immagine = npt.NDArray[np.uint8]
+Vettore = npt.NDArray[np.float64]
 
 
 class RiferimentoNonTrovato(Exception):
@@ -77,17 +78,26 @@ def marker_stampato_verificato(lato_mm: float, tolleranza_mm: float = 0.2) -> Ri
     return Riferimento(lato_mm, tolleranza_mm, "marker stampato e verificato al calibro")
 
 
-def lato_pixel_aruco(immagine: Immagine, dizionario: int | None = None) -> float:
-    """Rileva il primo marker ArUco e restituisce il lato medio in pixel."""
+def rileva_marker(immagine: Immagine, dizionario: int | None = None) -> Vettore:
+    """Rileva il primo marker ArUco e restituisce i suoi 4 angoli (x, y) in pixel."""
     codice = cv2.aruco.DICT_4X4_50 if dizionario is None else dizionario
     vocabolario = cv2.aruco.getPredefinedDictionary(codice)
     rilevatore = cv2.aruco.ArucoDetector(vocabolario, cv2.aruco.DetectorParameters())
     angoli, ids, _ = rilevatore.detectMarkers(immagine)
     if ids is None or len(angoli) == 0:
         raise RiferimentoNonTrovato("nessun marker ArUco rilevato")
-    c = angoli[0][0]  # 4 angoli (x, y)
-    lati = [float(np.linalg.norm(c[i] - c[(i + 1) % 4])) for i in range(4)]
+    return np.asarray(angoli[0][0], dtype=np.float64)
+
+
+def lato_pixel_da_angoli(angoli: Vettore) -> float:
+    """Lato medio in pixel dai 4 angoli del marker."""
+    lati = [float(np.linalg.norm(angoli[i] - angoli[(i + 1) % 4])) for i in range(4)]
     return sum(lati) / 4.0
+
+
+def lato_pixel_aruco(immagine: Immagine, dizionario: int | None = None) -> float:
+    """Rileva il primo marker ArUco e restituisce il lato medio in pixel."""
+    return lato_pixel_da_angoli(rileva_marker(immagine, dizionario))
 
 
 def scala_da_lato_pixel(
