@@ -218,9 +218,15 @@
         <div class="field">
           <label for="tipo">Riferimento di scala</label>
           <select id="tipo">
-            <option value="verificato">Marker stampato · verificato al calibro</option>
-            <option value="non_verificato">Marker stampato · non verificato</option>
-            <option value="id1">Tessera ID-1 (85,60 mm)</option>
+            <optgroup label="Marker ArUco — rilevato in automatico">
+              <option value="verificato" data-modo="aruco">Marker stampato · verificato al calibro</option>
+              <option value="non_verificato" data-modo="aruco">Marker stampato · non verificato</option>
+            </optgroup>
+            <optgroup label="Riferimento a clic — nessuna stampa">
+              <option value="id1_lungo" data-modo="manuale">Carta ID-1 / bancomat · lato lungo (85,60 mm)</option>
+              <option value="id1_corto" data-modo="manuale">Carta ID-1 · lato corto (53,98 mm)</option>
+              <option value="personalizzato" data-modo="manuale">Dimensione nota · righello (mm)</option>
+            </optgroup>
           </select>
         </div>
         <div class="row" id="rigaLato">
@@ -259,7 +265,7 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const state = { id:null, natW:0, natH:0, punti:[] };
+const state = { id:null, natW:0, natH:0, punti:[], puntiRif:[], modoRif:'aruco', fase:'target' };
 
 const drop=$('#drop'), file=$('#file'), stage=$('#stage'), img=$('#img'), ov=$('#ov');
 const hint=$('#hint'), reset=$('#reset'), btn=$('#misura'), err=$('#err');
@@ -302,7 +308,12 @@ img.addEventListener('load',async()=>{
   state.natW=img.naturalWidth; state.natH=img.naturalHeight;
   ov.setAttribute('viewBox',`0 0 ${state.natW} ${state.natH}`);
   stage.classList.add('show');
-  state.punti=[]; render();
+  state.punti=[]; state.puntiRif=[]; disegnaMarker(null); render();
+  if(state.modoRif==='manuale'){
+    state.id='manuale'; state.fase='riferimento';
+    setHint('clicca i 2 estremi del RIFERIMENTO', descrizioneRif());
+    aggiornaBottone(); return;
+  }
   setHint('rilevo il riferimento…');
   try{
     const res=await fetch('/api/analizza',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({immagine:state.dataUrl})});
@@ -319,25 +330,63 @@ img.addEventListener('load',async()=>{
 });
 
 ov.addEventListener('click',ev=>{
-  if(!state.id) return;
+  if(!state.dataUrl) return;
   const r=img.getBoundingClientRect();
-  const x=(ev.clientX-r.left)*state.natW/r.width;
-  const y=(ev.clientY-r.top)*state.natH/r.height;
-  if(state.punti.length>=2) state.punti=[];
-  state.punti.push([x,y]); render(); aggiornaBottone();
+  const p=[(ev.clientX-r.left)*state.natW/r.width,(ev.clientY-r.top)*state.natH/r.height];
+  if(state.modoRif==='manuale'){
+    if(state.fase==='riferimento'){
+      if(state.puntiRif.length>=2) state.puntiRif=[];
+      state.puntiRif.push(p);
+      if(state.puntiRif.length===2){ state.fase='target'; setHint('ora clicca i 2 estremi dell\'OGGETTO da misurare'); }
+    } else {
+      if(state.punti.length>=2) state.punti=[];
+      state.punti.push(p);
+    }
+  } else {
+    if(!state.id) return;
+    if(state.punti.length>=2) state.punti=[];
+    state.punti.push(p);
+  }
+  render(); aggiornaBottone();
 });
-reset.addEventListener('click',()=>{state.punti=[];render();aggiornaBottone();});
+reset.addEventListener('click',()=>{
+  state.punti=[];
+  if(state.modoRif==='manuale'){ state.puntiRif=[]; state.fase='riferimento'; setHint('clicca i 2 estremi del RIFERIMENTO', descrizioneRif()); }
+  render(); aggiornaBottone();
+});
 
-function aggiornaBottone(){ btn.disabled=!(state.id && state.punti.length===2); reset.hidden=state.punti.length===0; }
+function aggiornaBottone(){
+  const pronto = state.modoRif==='manuale'
+    ? (state.puntiRif.length===2 && state.punti.length===2)
+    : (!!state.id && state.punti.length===2);
+  btn.disabled=!pronto;
+  reset.hidden=(state.punti.length===0 && state.puntiRif.length===0);
+}
 
-$('#tipo').addEventListener('change',e=>{
-  const id1=e.target.value==='id1';
-  $('#rigaLato').style.display=id1?'none':'grid';
-  const nv=e.target.value==='non_verificato';
+function descrizioneRif(){
+  const t=$('#tipo').value;
+  if(t==='id1_lungo') return 'lato lungo della carta · 85,60 mm';
+  if(t==='id1_corto') return 'lato corto della carta · 53,98 mm';
+  return 'la dimensione nota che hai indicato';
+}
+$('#tipo').addEventListener('change',aggiornaTipo);
+function aggiornaTipo(){
+  const opt=$('#tipo').selectedOptions[0];
+  state.modoRif=(opt&&opt.dataset.modo)||'aruco';
+  const tipo=$('#tipo').value;
+  const mostraLato=(state.modoRif==='aruco')||(tipo==='personalizzato');
+  const mostraToll=(state.modoRif==='aruco');
+  $('#rigaLato').style.display=mostraLato?'grid':'none';
+  $('#campoToll').style.display=mostraToll?'block':'none';
+  document.querySelector('label[for="lato"]').textContent=(state.modoRif==='manuale')?'Dimensione (mm)':'Lato marker (mm)';
+  const nv=tipo==='non_verificato';
   $('#toll').step=nv?'0.01':'0.05';
   $('#campoToll').querySelector('label').textContent=nv?'Frazione stampa':'Tolleranza (mm)';
-  $('#toll').value=nv?'0.02':'0.2';
-});
+  if(state.modoRif==='aruco') $('#toll').value=nv?'0.02':'0.2';
+  state.punti=[]; state.puntiRif=[];
+  if(state.dataUrl) img.dispatchEvent(new Event('load')); // ri-prepara: rileva o chiedi i clic
+  else { render(); aggiornaBottone(); }
+}
 
 let mk=null;
 function disegnaMarker(ang){ mk=ang; render(); }
@@ -346,6 +395,10 @@ function render(){
   let s='';
   if(mk){ const p=mk.map(a=>a.join(',')).join(' ');
     s+=`<polygon points="${p}" fill="rgba(11,127,147,.14)" stroke="#0b7f93" stroke-width="${r*0.5}"/>`; }
+  const pr=state.puntiRif||[];
+  if(pr.length===2){ const[a,b]=pr;
+    s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#0b7f93" stroke-width="${r*0.5}"/>`; }
+  pr.forEach(p=>{ s+=`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="#0b7f93" stroke="#fff" stroke-width="${r*0.35}"/>`; });
   if(state.punti.length===2){ const[a,b]=state.punti;
     s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#a86a12" stroke-width="${r*0.5}" stroke-dasharray="${r*1.5} ${r}"/>`; }
   state.punti.forEach(p=>{ s+=`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="#a86a12" stroke="#fff" stroke-width="${r*0.35}"/>`; });
@@ -356,13 +409,19 @@ function setHint(a,b){ hint.hidden=false; hint.innerHTML = a + (b?` <span class=
 btn.addEventListener('click',async()=>{
   err.hidden=true; btn.disabled=true; btn.textContent='calcolo…';
   const tipo=$('#tipo').value;
-  const riferimento={tipo};
-  if(tipo!=='id1'){ riferimento.lato_mm=parseFloat($('#lato').value);
-    if(tipo==='non_verificato') riferimento.frazione=parseFloat($('#toll').value);
-    else riferimento.tolleranza_mm=parseFloat($('#toll').value); }
-  const corpo={ id:state.id, riferimento, punti:state.punti,
+  const corpo={ punti:state.punti,
     modalita:document.querySelector('input[name=mod]:checked').value,
     tolleranza_mm:parseFloat($('#tolreq').value), sigma_seg_px:parseFloat($('#sigmaseg').value) };
+  if(state.modoRif==='manuale'){
+    corpo.riferimento_punti=state.puntiRif;
+    corpo.riferimento={tipo};
+    if(tipo==='personalizzato') corpo.riferimento.lato_mm=parseFloat($('#lato').value);
+  } else {
+    corpo.id=state.id;
+    corpo.riferimento={tipo, lato_mm:parseFloat($('#lato').value)};
+    if(tipo==='non_verificato') corpo.riferimento.frazione=parseFloat($('#toll').value);
+    else corpo.riferimento.tolleranza_mm=parseFloat($('#toll').value);
+  }
   try{
     const res=await fetch('/api/misura',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
     const d=await res.json();
@@ -416,6 +475,7 @@ function mostra(){
 window.addEventListener('hashchange',mostra);
 navback.addEventListener('click',()=>vai('home'));
 document.querySelectorAll('.task[data-go]').forEach(b=>b.addEventListener('click',()=>vai(b.dataset.go)));
+aggiornaTipo();
 mostra();
 
 // --- service worker: offline, nessuna rete a runtime ---
