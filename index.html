@@ -274,11 +274,19 @@
 
       <div class="cam" id="cam" hidden>
         <div class="camwrap"><video id="video" autoplay playsinline muted></video></div>
-        <p class="camhint"><b>Inquadra tutta la scena</b> — l'oggetto e i riferimenti devono starci per intero, appoggiati sullo stesso piano. Allontanati finché ci sta tutto.</p>
+        <p class="camhint"><b>Inquadra tutta la scena</b> — l'oggetto e i riferimenti devono starci per intero, appoggiati sullo stesso piano. Allontanati finché ci sta tutto. <br><b>Con una webcam da scrivania</b> il campo è stretto e non si può allargare oltre l'obiettivo: per scene ampie conviene il telefono, o scattare la foto e caricarla da <i>Scegli un'immagine</i>.</p>
         <p class="camres" id="camres"></p>
         <div class="camsel" id="camsel" hidden>
           <label for="selCam">fotocamera</label>
           <select id="selCam"></select>
+        </div>
+        <div class="camsel">
+          <label for="selFormato">formato</label>
+          <select id="selFormato">
+            <option value="4-3">4:3 — più campo in altezza</option>
+            <option value="auto">automatico</option>
+            <option value="16-9">16:9 — panoramico</option>
+          </select>
         </div>
         <div class="cam-actions">
           <button class="go" id="capture">Cattura fotogramma</button>
@@ -450,7 +458,7 @@ ricomincia.addEventListener('click',()=>{
 // --- cattura in-app (getUserMedia). Il flusso video non lascia la pagina: il
 // fotogramma finisce in un canvas locale e da li' nel calcolo, senza rete. ---
 const cam=$('#cam'), video=$('#video'), capture=$('#capture'), camClose=$('#camClose');
-const camres=$('#camres'), camsel=$('#camsel'), selCam=$('#selCam');
+const camres=$('#camres'), camsel=$('#camsel'), selCam=$('#selCam'), selFormato=$('#selFormato');
 let stream=null;
 async function apriCam(deviceId){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
@@ -461,17 +469,38 @@ async function apriCam(deviceId){
   // verticale**: e' cosi' che si finisce a inquadrare il viso invece della
   // scena intera. Chiediamo larghezza alta e lasciamo che sia il dispositivo a
   // scegliere il formato, che e' quello col campo visivo piu' ampio.
-  const vincoli = deviceId
-    ? {deviceId:{exact:deviceId}, width:{ideal:4096}}
-    : {facingMode:{ideal:'environment'}, width:{ideal:4096}};
+  const vincoli = {width:{ideal:4096}};
+  if(deviceId) vincoli.deviceId={exact:deviceId};
+  else vincoli.facingMode={ideal:'environment'};
+  // Molte webcam hanno il sensore 4:3 e in 16:9 ne usano solo una fascia
+  // centrale: chiedere 4:3 restituisce il campo verticale che il 16:9 ritaglia.
+  // Su un sensore nativo 16:9 non cambia nulla — per questo si puo' scegliere.
+  const f=selFormato.value;
+  if(f==='4-3') vincoli.aspectRatio={ideal:4/3};
+  else if(f==='16-9') vincoli.aspectRatio={ideal:16/9};
+
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:vincoli});
     video.srcObject=stream; cam.hidden=false;
-    video.addEventListener('loadedmetadata',()=>{
-      camres.textContent=`fotogramma ${video.videoWidth}×${video.videoHeight} px`;
-    },{once:true});
+    video.addEventListener('loadedmetadata',mostraFotogramma,{once:true});
     await elencaFotocamere();
   }catch(e){ setHint('⚠ fotocamera non disponibile: '+(e.message||e.name)); }
+}
+selFormato.addEventListener('change',()=>apriCam(selCam.value||undefined));
+
+// La risoluzione ottenuta e quella massima dichiarata dal dispositivo: sono i
+// due numeri che dicono se il campo visivo stretto viene dal formato scelto o
+// e' semplicemente quello dell'obiettivo.
+function mostraFotogramma(){
+  let txt=`fotogramma ${video.videoWidth}×${video.videoHeight} px`;
+  const track=stream&&stream.getVideoTracks()[0];
+  if(track&&track.getCapabilities){
+    try{
+      const c=track.getCapabilities();
+      if(c.width&&c.height) txt+=` · il dispositivo arriva a ${c.width.max}×${c.height.max}`;
+    }catch(e){/* getCapabilities non ovunque */}
+  }
+  camres.textContent=txt;
 }
 
 // I nomi delle fotocamere sono leggibili solo dopo il consenso, quindi si
