@@ -140,3 +140,57 @@ def test_il_rilevatore_non_fa_rete() -> None:
     sorgente = _RILEVA_JS.read_text(encoding="utf-8")
     for vietato in ("fetch(", "XMLHttpRequest", "WebSocket", "navigator.sendBeacon", "import("):
         assert vietato not in sorgente, f"il rilevatore non deve fare rete: trovato {vietato}"
+
+
+_BANCO_OMOGRAFIA = """
+const R = require(%s);
+// vista prospettica nota: si proietta il piano della tessera con un'omografia
+// scelta, poi si verifica che il rilevatore la inverta e restituisca i mm veri.
+const H = [2.4, 0.35, 120, -0.28, 2.15, 90, 0.0009, 0.0004];
+const proj = p => {
+  const d = H[6]*p[0] + H[7]*p[1] + 1;
+  return [(H[0]*p[0]+H[1]*p[1]+H[2])/d, (H[3]*p[0]+H[4]*p[1]+H[5])/d];
+};
+const piano = [[0,0],[85.60,0],[85.60,53.98],[0,53.98]];
+const vertici = piano.map(proj);
+const a = [10,10], b = [70,40];
+const vera = Math.hypot(b[0]-a[0], b[1]-a[1]);
+const m = R.misuraSulPiano({vertici, lungoDaPrimoVertice:true}, proj(a), proj(b), 0.03, 1.0);
+
+// confronto col metodo a scala unica (media dei lati opposti)
+const l1 = Math.hypot(vertici[1][0]-vertici[0][0], vertici[1][1]-vertici[0][1]);
+const l2 = Math.hypot(vertici[2][0]-vertici[3][0], vertici[2][1]-vertici[3][1]);
+const scala = 85.60 / ((l1+l2)/2);
+const pa = proj(a), pb = proj(b);
+const scalare = scala * Math.hypot(pb[0]-pa[0], pb[1]-pa[1]);
+
+process.stdout.write(JSON.stringify({
+  vera, omografia: m.mm, sigma: m.sigmaMm, scalare,
+}));
+"""
+
+
+def test_omografia_misura_esatta_dove_la_scala_unica_sbaglia(tmp_path: Path) -> None:
+    """Una scala unica mm/px vale solo per una ripresa frontale.
+
+    Appena la camera e' inclinata il piano si proietta con fattori diversi punto
+    per punto, e un oggetto lontano dalla tessera viene convertito con la scala
+    sbagliata. Con i quattro vertici il piano si rettifica e l'errore prospettico
+    sparisce — non si riduce, sparisce, perche' e' geometria esatta.
+    """
+    banco = tmp_path / "omografia.cjs"
+    banco.write_text(_BANCO_OMOGRAFIA % json.dumps(_RILEVA_JS.as_posix()), encoding="utf-8")
+    completato = subprocess.run(
+        ["node", str(banco)], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert completato.returncode == 0, completato.stderr
+    d = json.loads(completato.stdout)
+
+    assert d["omografia"] == pytest.approx(d["vera"], abs=1e-6)
+    # e il metodo che sostituisce sbaglia in modo tutt'altro che trascurabile
+    errore_scalare = abs(d["scalare"] - d["vera"]) / d["vera"]
+    assert errore_scalare > 0.02, (
+        "se la scala unica non sbagliasse, questo test non proverebbe nulla: "
+        f"errore {errore_scalare:.4%}"
+    )
+    assert d["sigma"] > 0.0

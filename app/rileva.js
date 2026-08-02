@@ -404,6 +404,7 @@ function valutaQuadrilatero(v, residuo, puntiPerLato) {
   return {
     vertici: v, latoLungoPx: lungo, latoCortoPx: corto, rapporto, deviazione,
     estremiLatoLungo: estremi, residuoPx: residuo,
+    lungoDaPrimoVertice: lungoOrizzontale,
     sigmaLatoPx: sigmaLato(residuo, puntiPerLato, lungo, deviazione),
     sigmaFitPx: sigmaFit(residuo, puntiPerLato),
     puntiPerLato,
@@ -480,7 +481,111 @@ function deduplica(lista) {
   return tenuti;
 }
 
-const API = { rilevaTessere, RAPPORTO_ID1,
+// --- 11. omografia: misurare sul piano invece che con una scala unica --------
+//
+// Una scala scalare (mm/px) presuppone che il fattore di conversione sia lo
+// stesso ovunque nel fotogramma. E' vero solo se la ripresa e' perfettamente
+// frontale: appena la camera e' inclinata, la parte piu' vicina del piano
+// appare ingrandita e quella lontana rimpicciolita, e un oggetto **lontano
+// dalla tessera** viene misurato con la scala sbagliata. Mediare i lati opposti
+// compensa il primo ordine sulla tessera, non sul resto della scena.
+//
+// Con i quattro vertici e le dimensioni note si ricava invece l'omografia che
+// porta il piano della tessera nell'immagine. Invertendola, ogni punto del
+// **piano** si converte in millimetri esatti, ovunque si trovi. Vale solo per
+// cio' che giace su quel piano: e' la stessa condizione di sempre (§5.3), ma
+// qui almeno la prospettiva non aggiunge errore.
+
+// Risolve A x = b con eliminazione di Gauss e pivot parziale.
+function risolvi(A, b) {
+  const n = b.length;
+  const M = A.map((riga, i) => riga.concat([b[i]]));
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    }
+    if (Math.abs(M[pivot][col]) < 1e-12) return null;   // sistema singolare
+    [M[col], M[pivot]] = [M[pivot], M[col]];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col] / M[col][col];
+      if (f === 0) continue;
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+    }
+  }
+  return M.map((riga, i) => riga[n] / riga[i]);   // Gauss-Jordan: resta la diagonale
+}
+
+// Omografia immagine -> piano (mm) da 4 corrispondenze.
+function omografia(daImmagine, aPiano) {
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = daImmagine[i], [X, Y] = aPiano[i];
+    A.push([x, y, 1, 0, 0, 0, -X * x, -X * y]); b.push(X);
+    A.push([0, 0, 0, x, y, 1, -Y * x, -Y * y]); b.push(Y);
+  }
+  const h = risolvi(A, b);
+  return h ? h.concat([1]) : null;
+}
+
+function applica(h, p) {
+  const den = h[6] * p[0] + h[7] * p[1] + 1;
+  if (Math.abs(den) < 1e-12) return null;
+  return [(h[0] * p[0] + h[1] * p[1] + h[2]) / den,
+          (h[3] * p[0] + h[4] * p[1] + h[5]) / den];
+}
+
+// Angoli della tessera nel piano, in millimetri: il lato lungo e' 85,60 e il
+// corto 53,98, e quale dei due parta dal primo vertice lo dice il rilevatore.
+function pianoTessera(lungoDaPrimoVertice) {
+  const L = 85.60, C = 53.98;
+  return lungoDaPrimoVertice
+    ? [[0, 0], [L, 0], [L, C], [0, C]]
+    : [[0, 0], [C, 0], [C, L], [0, L]];
+}
+
+/**
+ * Lunghezza in mm di un segmento che giace sul piano della tessera, con la sua
+ * incertezza propagata numericamente: si perturba ogni coordinata d'ingresso
+ * della propria sigma e si somma in quadratura l'effetto sul risultato. E' il
+ * jacobiano calcolato per differenze finite, non una stima a occhio.
+ */
+function misuraSulPiano(tessera, a, b, sigmaVertice, sigmaPunto) {
+  const piano = pianoTessera(tessera.lungoDaPrimoVertice !== false);
+  const lunghezza = (vertici, pa, pb) => {
+    const h = omografia(vertici, piano);
+    if (!h) return null;
+    const A = applica(h, pa), B = applica(h, pb);
+    if (!A || !B) return null;
+    return Math.hypot(B[0] - A[0], B[1] - A[1]);
+  };
+
+  const base = lunghezza(tessera.vertici, a, b);
+  if (base === null) return null;
+
+  const delta = 0.25;   // px: abbastanza piccolo per la derivata, grande per il rumore numerico
+  let varianza = 0;
+  for (let i = 0; i < 4; i++) for (let c = 0; c < 2; c++) {
+    const mossi = tessera.vertici.map(v => v.slice());
+    mossi[i][c] += delta;
+    const l = lunghezza(mossi, a, b);
+    if (l === null) return null;
+    const derivata = (l - base) / delta;
+    varianza += (derivata * sigmaVertice) ** 2;
+  }
+  for (const quale of [0, 1]) for (let c = 0; c < 2; c++) {
+    const pa = a.slice(), pb = b.slice();
+    (quale === 0 ? pa : pb)[c] += delta;
+    const l = lunghezza(tessera.vertici, pa, pb);
+    if (l === null) return null;
+    const derivata = (l - base) / delta;
+    varianza += (derivata * sigmaPunto) ** 2;
+  }
+  return { mm: base, sigmaMm: Math.sqrt(varianza) };
+}
+
+const API = { rilevaTessere, RAPPORTO_ID1, omografia, applica, misuraSulPiano,
   _interni: { aGrigi, sfoca, otsu, maschera, gradiente, contorni,
               semplifica, semplificaChiusa, fitRetta, intersezione, areaPoligono, convesso } };
 
