@@ -16,6 +16,12 @@
 // L'incertezza non e' inventata: viene dal **residuo del fit** delle rette, cioe'
 // da quanto i punti di bordo si discostano davvero dalla retta che li descrive.
 
+// Stesso fattore di copertura del core (k=2, ~95%): le verifiche qui sotto
+// usano il medesimo criterio di compatibilita' del doppio riferimento, cioe'
+// "lo scarto non supera k volte la propria incertezza". Non e' un parametro
+// indipendente e non va regolato a parte.
+const COPERTURA_K = 2.0;
+
 // rapporto d'aspetto ISO/IEC 7810 ID-1: 85,60 / 53,98
 const RAPPORTO_ID1 = 85.60 / 53.98;   // 1.58577...
 
@@ -790,6 +796,170 @@ function altezzaConIncertezza(verticiTessera, pianoTessera, basePiano, cima,
   return { mm: base, sigmaMm: Math.sqrt(varianza) };
 }
 
+// --- 14. la scatola e' davvero appoggiata su quel piano? ---------------------
+//
+// Tutta la misura poggia su un'ipotesi che l'utente dichiara e l'app finora
+// accettava: che la scatola stia sullo **stesso piano** della tessera. Se non e'
+// vero — scatola su un rialzo, tessera su un libro, oggetto inclinato — le
+// dimensioni escono sbagliate di parecchi percento **senza che nulla lo
+// segnali**, ed e' lo stesso meccanismo del riferimento tenuto in mano.
+//
+// Un parallelepipedo pero' e' ridondante: otto vertici per tre dimensioni. La
+// ridondanza si spende in verifiche, e ognuna produce uno **scarto in
+// millimetri** che si confronta con la propria incertezza — non con una soglia
+// scelta a mano.
+//
+// COSA QUESTE VERIFICHE NON CATTURANO, e va detto perche' e' il caso peggiore:
+// una scatola **sollevata parallelamente** al piano (su un rialzo, un altro
+// libro, un pallet) supera tutte e tre le prove. Rettificata, la sua base resta
+// un rettangolo perfetto, le facce tornano, le altezze concordano: e'
+// internamente coerente, semplicemente e' una scatola *piu' grande* su quel
+// piano. Dall'immagine i due casi sono **indistinguibili** — e' l'ambiguita' di
+// scala di §3.1 applicata alla profondita', e nessun controllo geometrico la
+// risolve. Sul banco un rialzo di appena 5 mm passa senza che nulla si muova.
+// Resta una condizione che l'utente deve garantire, non una che l'app verifica:
+// va detto nell'interfaccia, non nascosto dietro un esito verde.
+//
+// 1. **Base rettangolare.** Rettificata sul piano, la base deve avere angoli
+//    retti. Se la base non giace sul piano, l'omografia la deforma in un
+//    quadrilatero storto.
+// 2. **Facce verticali coerenti.** Riportando i vertici superiori alla quota
+//    misurata, le loro coordinate sul piano devono coincidere con quelle della
+//    base: e' il residuo di riproiezione del parallelepipedo.
+// 3. **Altezze concordi.** I quattro spigoli devono dare la stessa altezza; se
+//    divergono, la scatola e' inclinata o non e' un parallelepipedo.
+
+function _angoloTraLati(a, b, c) {
+  const u = [a[0] - b[0], a[1] - b[1]], v = [c[0] - b[0], c[1] - b[1]];
+  const nu = Math.hypot(u[0], u[1]), nv = Math.hypot(v[0], v[1]);
+  if (nu < 1e-9 || nv < 1e-9) return null;
+  const cos = Math.max(-1, Math.min(1, (u[0]*v[0] + u[1]*v[1]) / (nu*nv)));
+  return Math.acos(cos) * 180 / Math.PI;
+}
+
+/** Scarti dai 90 gradi dei quattro angoli della base rettificata. */
+function ortogonalitaBase(basePiano) {
+  const scarti = [];
+  for (let i = 0; i < 4; i++) {
+    const a = _angoloTraLati(basePiano[(i + 3) % 4], basePiano[i], basePiano[(i + 1) % 4]);
+    if (a === null) return null;
+    scarti.push(a - 90);
+  }
+  return scarti;
+}
+
+/**
+ * Interseca il raggio visivo del punto `p` col piano a quota `h` e restituisce
+ * le coordinate (X, Y) sul piano. Serve a riportare giu' i vertici superiori.
+ */
+function puntoSulPianoAQuota(posa, fPx, cx, cy, p, h) {
+  const { r1, r2, r3, t } = posa;
+  const d = [(p[0] - cx) / fPx, (p[1] - cy) / fPx, 1];
+  // X*r1 + Y*r2 + h*r3 + t = s*d  ->  tre equazioni, incognite X, Y, s
+  const o = [t[0] + h*r3[0], t[1] + h*r3[1], t[2] + h*r3[2]];
+  const M = [[r1[0], r2[0], -d[0]], [r1[1], r2[1], -d[1]], [r1[2], r2[2], -d[2]]];
+  const sol = risolvi(M, [-o[0], -o[1], -o[2]]);
+  if (!sol || !isFinite(sol[0]) || !isFinite(sol[1])) return null;
+  return [sol[0], sol[1]];
+}
+
+/**
+ * Verifica che la scatola sia coerente con l'ipotesi dichiarata. Restituisce
+ * gli scarti misurati e la loro soglia di compatibilita', derivata propagando
+ * l'incertezza dei punti — stesso criterio del doppio riferimento (§5.3):
+ * compatibile se lo scarto non supera k volte la propria incertezza.
+ */
+function verificaScatola(opts) {
+  const { verticiTessera, pianoTessera, baseImg, cimaImg,
+          larghezza, altezza, sigmaVertice, sigmaPunto } = opts;
+  const k = opts.coperturaK ?? COPERTURA_K;
+  const cx = larghezza / 2, cy = altezza / 2;
+
+  const misura = (vt, bi, ci) => {
+    const f = focaleDaVertici(vt, larghezza, altezza);
+    if (f === null) return null;
+    const H = omografia(vt, pianoTessera);
+    const G = omografia(pianoTessera, vt);
+    if (!H || !G) return null;
+    const posa = posaDaOmografia(G, f, cx, cy);
+    if (!posa) return null;
+    const base = bi.map(p => applica(H, p));
+    if (base.some(p => !p)) return null;
+    const alt = [];
+    for (let i = 0; i < 4; i++) {
+      const h = altezzaSulPiano(posa, f, cx, cy, base[i][0], base[i][1], ci[i]);
+      if (h === null) return null;
+      alt.push(h);
+    }
+    const hMedia = alt.reduce((a, b) => a + b, 0) / 4;
+    const ort = ortogonalitaBase(base);
+    if (!ort) return null;
+    // residuo: i vertici superiori riportati alla quota media devono cadere
+    // sopra quelli di base
+    let residuo = 0;
+    for (let i = 0; i < 4; i++) {
+      const q = puntoSulPianoAQuota(posa, f, cx, cy, ci[i], hMedia);
+      if (!q) return null;
+      residuo = Math.max(residuo, Math.hypot(q[0] - base[i][0], q[1] - base[i][1]));
+    }
+    const dispAlt = Math.sqrt(alt.reduce((a, b) => a + (b - hMedia) ** 2, 0) / 4);
+    return {
+      ortogonalitaMax: Math.max(...ort.map(Math.abs)),
+      residuoMm: residuo,
+      dispersioneAltezzeMm: dispAlt,
+    };
+  };
+
+  const base = misura(verticiTessera, baseImg, cimaImg);
+  if (!base) return null;
+
+  // incertezza degli scarti: si perturbano tutti gli ingressi
+  const delta = 0.25;
+  const chiavi = ['ortogonalitaMax', 'residuoMm', 'dispersioneAltezzeMm'];
+  const varianze = { ortogonalitaMax: 0, residuoMm: 0, dispersioneAltezzeMm: 0 };
+  const perturba = (lista, i, c, sigma) => {
+    const vt = verticiTessera.map(v => v.slice());
+    const bi = baseImg.map(v => v.slice());
+    const ci = cimaImg.map(v => v.slice());
+    ({ tessera: vt, base: bi, cima: ci })[lista][i][c] += delta;
+    const m = misura(vt, bi, ci);
+    if (!m) return;
+    for (const ch of chiavi) varianze[ch] += (((m[ch] - base[ch]) / delta) * sigma) ** 2;
+  };
+  for (let i = 0; i < 4; i++) for (let c = 0; c < 2; c++) {
+    perturba('tessera', i, c, sigmaVertice);
+    perturba('base', i, c, sigmaPunto);
+    perturba('cima', i, c, sigmaPunto);
+  }
+
+  const esiti = {};
+  const motivi = [];
+  for (const ch of chiavi) {
+    const u = Math.sqrt(varianze[ch]);
+    const soglia = k * u;
+    const superato = base[ch] <= soglia;
+    esiti[ch] = { scarto: base[ch], soglia, superato };
+    if (!superato) motivi.push(ch);
+  }
+  return {
+    coerente: motivi.length === 0,
+    ortogonalita: esiti.ortogonalitaMax,
+    residuoFacce: esiti.residuoMm,
+    altezzeConcordi: esiti.dispersioneAltezzeMm,
+    motivi,
+    spiegazione: motivi.length === 0 ? null : (
+      'la scatola non e\' coerente con l\'ipotesi che sia appoggiata sul piano '
+      + 'del riferimento: ' + motivi.map(m => ({
+        ortogonalitaMax: 'la base rettificata non ha angoli retti',
+        residuoMm: 'le facce verticali non tornano sopra la base',
+        dispersioneAltezzeMm: 'i quattro spigoli danno altezze diverse',
+      })[m]).join('; ')
+      + '. Cause tipiche: scatola inclinata rispetto al piano della tessera, '
+      + 'oggetto non parallelepipedo, oppure punti cliccati sugli spigoli sbagliati'
+    ),
+  };
+}
+
 // diagonale del formato 35 mm: serve solo a rendere leggibile il numero
 const DIAGONALE_35MM = 43.27;
 function equivalente35(fPx, larghezza, altezza) {
@@ -798,7 +968,7 @@ function equivalente35(fPx, larghezza, altezza) {
 
 const API = { rilevaTessere, RAPPORTO_ID1, omografia, applica, misuraSulPiano,
   focaleDaVertici, stimaFocale, fondiFocali, equivalente35,
-  posaDaOmografia, altezzaSulPiano, altezzaConIncertezza,
+  posaDaOmografia, altezzaSulPiano, altezzaConIncertezza, verificaScatola,
   _interni: { aGrigi, sfoca, otsu, maschera, gradiente, contorni,
               semplifica, semplificaChiusa, fitRetta, intersezione, areaPoligono, convesso } };
 

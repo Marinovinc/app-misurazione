@@ -421,3 +421,90 @@ def test_tre_dimensioni_di_una_scatola_sul_piano_del_riferimento(tmp_path: Path)
                 f"{caso['nome']}: {chiave} = {e[chiave]:.3f} invece di {e['vero'][chiave]}"
             )
         assert e["sigmaH"] > 0.0, "un'altezza senza incertezza sarebbe fiducia falsa"
+
+
+_BANCO_VERIFICA = """
+const R = require(%s);
+function scena({f=1500,rx=0.55,ry=0.30,rz=0.12,tz=520,L=210,W=148,H=95,
+                rialzo=0,inclina=0,larghezza=1200,altezza=800}){
+  const cx=Math.cos(rx),sx=Math.sin(rx),cy=Math.cos(ry),sy=Math.sin(ry);
+  const cz=Math.cos(rz),sz=Math.sin(rz);
+  const proj=p=>{let[x,y,z]=p;
+    [y,z]=[y*cx-z*sx,y*sx+z*cx];[x,z]=[x*cy+z*sy,-x*sy+z*cy];[x,y]=[x*cz-y*sz,x*sz+y*cz];
+    const Z=z+tz;return[larghezza/2+f*x/Z,altezza/2+f*y/Z];};
+  const tw=[[-42.8,-26.99,0],[42.8,-26.99,0],[42.8,26.99,0],[-42.8,26.99,0]];
+  const ox=140,oy=-30;
+  const q=(x,y,z)=>[x,y,z+rialzo+inclina*(x-ox)];
+  const ang=[[ox,oy],[ox+L,oy],[ox+L,oy+W],[ox,oy+W]];
+  return {larghezza,altezza,tessera:tw.map(proj),
+    base:ang.map(p=>proj(q(p[0],p[1],0))), cima:ang.map(p=>proj(q(p[0],p[1],H)))};
+}
+const PIANO=[[-42.8,-26.99],[42.8,-26.99],[42.8,26.99],[-42.8,26.99]];
+const casi=JSON.parse(process.argv[2]);
+process.stdout.write(JSON.stringify(casi.map(c=>{
+  const s=scena(c);
+  const r=R.verificaScatola({verticiTessera:s.tessera,pianoTessera:PIANO,
+    baseImg:s.base,cimaImg:s.cima,larghezza:s.larghezza,altezza:s.altezza,
+    sigmaVertice:0.05,sigmaPunto:0.5});
+  return r ? {coerente:r.coerente, motivi:r.motivi,
+              angolo:r.ortogonalita.scarto, sogliaAngolo:r.ortogonalita.soglia} : null;
+})));
+"""
+
+
+def test_verifica_scatola_rifiuta_le_inclinazioni(tmp_path: Path) -> None:
+    """La ridondanza del parallelepipedo spesa in verifiche.
+
+    Ogni scarto si confronta con la **propria** incertezza propagata, non con
+    una soglia scelta a mano: stesso criterio del doppio riferimento (§5.3).
+    """
+    casi = [
+        {"nome": "appoggiata sul piano", "atteso": True},
+        {"nome": "inclinata 8%", "inclina": 0.08, "atteso": False},
+        {"nome": "inclinata 2%", "inclina": 0.02, "atteso": False},
+    ]
+    banco = tmp_path / "verifica.cjs"
+    banco.write_text(_BANCO_VERIFICA % json.dumps(_RILEVA_JS.as_posix()), encoding="utf-8")
+    completato = subprocess.run(
+        ["node", str(banco), json.dumps(casi)],
+        capture_output=True, text=True, timeout=90, check=False,
+    )
+    assert completato.returncode == 0, completato.stderr
+    for caso, e in zip(casi, json.loads(completato.stdout), strict=True):
+        assert e is not None, caso["nome"]
+        assert e["coerente"] is caso["atteso"], (
+            f"{caso['nome']}: coerente={e['coerente']}, scarto angolare "
+            f"{e['angolo']:.2f}° contro soglia {e['sogliaAngolo']:.2f}°"
+        )
+
+
+def test_una_scatola_sollevata_e_indistinguibile(tmp_path: Path) -> None:
+    """Il limite della verifica, pinnato perche' non venga scambiato per una
+    garanzia.
+
+    Una scatola su un rialzo, sollevata **parallelamente** al piano, supera
+    tutte le prove: rettificata, la sua base resta un rettangolo perfetto e la
+    geometria e' internamente coerente — e' semplicemente una scatola piu'
+    grande su quel piano. Dall'immagine i due casi sono indistinguibili (§3.1
+    applicata alla profondita'), e gia' 5 mm di rialzo passano inosservati.
+
+    Se un giorno questo test cominciasse a fallire, vorrebbe dire che qualcuno
+    ha aggiunto un controllo che *crede* di distinguerli: andrebbe verificato
+    molto attentamente prima di fidarsene.
+    """
+    casi = [
+        {"nome": "rialzo 5 mm", "rialzo": 5},
+        {"nome": "rialzo 40 mm", "rialzo": 40},
+    ]
+    banco = tmp_path / "verifica.cjs"
+    banco.write_text(_BANCO_VERIFICA % json.dumps(_RILEVA_JS.as_posix()), encoding="utf-8")
+    completato = subprocess.run(
+        ["node", str(banco), json.dumps(casi)],
+        capture_output=True, text=True, timeout=90, check=False,
+    )
+    assert completato.returncode == 0, completato.stderr
+    for caso, e in zip(casi, json.loads(completato.stdout), strict=True):
+        assert e["coerente"] is True, (
+            f"{caso['nome']}: la verifica ora lo rifiuta — controllare se il "
+            "nuovo criterio distingue davvero o se e' un falso positivo"
+        )
