@@ -1,4 +1,34 @@
-# misura — nucleo metrologico (fase 0)
+# misura — nucleo metrologico + app
+
+**App online:** <https://marinovinc.github.io/app-misurazione/>
+
+Client-only: il calcolo gira nel browser, **nessuna immagine lascia il
+dispositivo** — non perché qualcuno prometta di non guardarla, ma perché non
+esiste un server a cui possa arrivare. Funziona offline dopo la prima visita.
+
+Cosa fa: misura un oggetto **piatto** partendo da un riferimento di dimensione
+nota nella stessa foto (una tessera ID-1 — bancomat, fedeltà — viene
+riconosciuta da sola). Ogni valore esce con la sua **incertezza** e la sua
+**provenienza**, e quando la scala non è verificabile non esce nessun numero.
+
+**Limiti dichiarati.** La misura vale per ciò che giace sul **piano del
+riferimento**: un riferimento tenuto in mano, o più vicino alla fotocamera
+dell'oggetto, produce un errore sistematico di qualche percento che nessuna
+incertezza dichiarata cattura. La modalità «certificata» qui significa
+acquisizione live in-app più due riferimenti distinti le cui scale concordano —
+**non** promette l'1%, che richiederebbe anche cattura guidata e un profilo di
+calibrazione per modello di dispositivo. L'incertezza dichiarata **non è ancora
+calibrata** su un campione reale. Non idonea a fatturazione o usi con valore
+legale.
+
+## Aggiornare il sito
+
+```bash
+bash pubblica.sh
+```
+
+Ricostruisce il branch `gh-pages` dai file statici di `app/`, dopo aver
+verificato il gate.
 
 Nucleo per ricavare misure da immagini in cui **l'incertezza e la provenienza sono di prima
 classe**: nessun numero secco, ogni misura porta con sé la sua incertezza e la sua origine.
