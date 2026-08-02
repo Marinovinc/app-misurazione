@@ -254,4 +254,19 @@ def misura() -> Any:
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    # Default 127.0.0.1: il server di sviluppo di Flask non e' pensato per stare
+    # su una rete, e l'app non ha nulla da esporre. Con MISURA_LAN=1 ascolta
+    # anche sulla rete locale, per provare dal telefono.
+    #
+    # Attenzione: da telefono su http:// la **fotocamera non funziona** —
+    # getUserMedia richiede un contesto sicuro, e solo localhost fa eccezione.
+    # Resta il percorso "Scegli un'immagine", che e' quello che serve per
+    # provare il rilevamento su foto vere. Per la fotocamera serve HTTPS,
+    # cioe' la pubblicazione su GitHub Pages.
+    import os
+
+    lan = os.environ.get("MISURA_LAN") == "1"
+    host = "0.0.0.0" if lan else "127.0.0.1"  # noqa: S104
+    if lan:
+        print("in ascolto anche sulla rete locale — apri dal telefono l'IP di questo PC")
+    app.run(host=host, port=5000, debug=False)
