@@ -127,6 +127,25 @@
   .diag .ambiguo{background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);
     border-radius:8px;padding:9px 11px;color:var(--ink);align-items:flex-start;line-height:1.45;}
 
+  /* calibrazione: passi espliciti, con lo schema di come inclinare */
+  .passi-cal{display:flex;flex-direction:column;gap:14px;margin:20px 0 22px;}
+  .pc{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);
+    border-radius:12px;padding:15px 16px;box-shadow:var(--shadow);font-size:14.5px;line-height:1.5;}
+  .pc small{display:block;color:var(--muted);font-size:12.8px;margin-top:5px;line-height:1.5;}
+  .pc-n{flex:none;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;
+    display:grid;place-items:center;font-family:var(--mono);font-weight:600;font-size:14px;}
+  :root[data-theme="dark"] .pc-n{color:#06222a;}
+  .schema{display:flex;gap:16px;margin:11px 0 4px;}
+  .sc{text-align:center;font-size:11.5px;color:var(--muted);line-height:1.35;}
+  .sc svg{width:96px;height:64px;display:block;margin-bottom:5px;}
+  .sc.no svg *{fill:color-mix(in srgb,var(--crit) 18%,transparent);stroke:var(--crit);stroke-width:2.5;}
+  .sc.si svg *{fill:color-mix(in srgb,var(--good) 18%,transparent);stroke:var(--good);stroke-width:2.5;}
+  .cal-avanza{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:13px 15px;margin-bottom:14px;
+    border-radius:10px;background:var(--surface-2);border:1px solid var(--line);}
+  .cal-pallini{display:flex;gap:7px;}
+  .cal-pallini i{width:16px;height:16px;border-radius:50%;border:2px solid var(--line-strong);display:block;}
+  .cal-pallini i.ok{background:var(--good);border-color:var(--good);}
+  .cal-testo{flex:1;min-width:180px;font-size:13.5px;}
   .manca{font-size:12.5px;color:var(--muted);margin:9px 0 0;}
   .manca[hidden]{display:none;}
   .manca b{color:var(--ink);}
@@ -458,39 +477,73 @@
     <header>
       <div class="brand">app-misurazione</div>
       <h1>Calibra la fotocamera</h1>
-      <p class="sub">Fotografa la tessera da <b>angolazioni diverse</b>, inclinata. Da ogni scatto si ricava la focale dell'obiettivo; su più viste l'incertezza si stringe.</p>
+      <p class="sub">Serve una volta sola per questo telefono. Fotografa <b>la tessera da sola</b>, 4 o 5 volte, cambiando ogni volta l'angolazione.</p>
     </header>
 
-    <details class="guida">
-      <summary>A che serve, e a che <b>non</b> serve</summary>
-      <p><b>Serve</b> alla terza dimensione. L'altezza di una scatola esce dal piano del riferimento, e per ricavarla occorre sapere quanto “vede” l'obiettivo. La focale si può stimare da una foto sola, ma mediandola su più viste diventa molto più stabile.</p>
-      <p class="guida-tip"><b>Non serve alla scala, e questo è il punto da non fraintendere.</b> Una fotocamera calibrata dà angoli, non distanze: una scatola piccola vicina e una grande lontana proiettano la stessa immagine anche con calibrazione perfetta. <b>Il riferimento di dimensione nota resta obbligatorio sempre</b>, calibrato o no.</p>
-      <p><b>Come scattare:</b> tessera ben visibile e inclinata, non frontale — vista di fronte i lati opposti restano paralleli e la focale non è determinabile, e l'app te lo dirà. Cambia angolazione a ogni scatto. Cinque o sei viste utili bastano.</p>
-      <p><b>Attenzione all'obiettivo:</b> il profilo vale per la fotocamera e lo zoom con cui l'hai fatto. Se il telefono passa al grandangolo o al tele, o se usi lo zoom, la focale cambia — l'app confronta comunque il profilo con ogni foto e segnala se non tornano.</p>
-    </details>
+    <div class="passi-cal">
+      <div class="pc">
+        <div class="pc-n">1</div>
+        <div><b>Appoggia la tessera</b> su un piano, da sola.<br>
+          <small>Va bene qualsiasi tessera formato bancomat. Sfondo di colore diverso, senza riflessi.</small></div>
+      </div>
+      <div class="pc">
+        <div class="pc-n">2</div>
+        <div><b>Fotografala inclinata</b>, non di fronte.
+          <div class="schema">
+            <div class="sc no">
+              <svg viewBox="0 0 120 80" aria-hidden="true"><rect x="22" y="22" width="76" height="48" rx="4"/></svg>
+              <span>di fronte<br><b>non funziona</b></span>
+            </div>
+            <div class="sc si">
+              <svg viewBox="0 0 120 80" aria-hidden="true"><polygon points="18,30 100,18 108,58 26,68"/></svg>
+              <span>inclinata<br><b>così</b></span>
+            </div>
+          </div>
+          <small>Di fronte i lati opposti restano paralleli e la focale non si può ricavare. L'app te lo dirà se succede.</small></div>
+      </div>
+      <div class="pc">
+        <div class="pc-n">3</div>
+        <div><b>Ripeti cambiando angolazione</b> — da destra, da sinistra, più alto, più basso.<br>
+          <small>Bastano 4 scatti buoni. Ogni scatto deve mostrare la tessera <b>intera</b>, con un margine attorno.</small></div>
+      </div>
+    </div>
 
     <section class="panel">
-      <div class="panel-h"><span>Scatti di calibrazione</span><button class="ghost" id="calAzzera" hidden>azzera</button></div>
+      <div class="panel-h"><span>Scatti</span><button class="ghost" id="calAzzera" hidden>ricomincia</button></div>
       <div class="panel-b">
+        <div class="cal-avanza" id="calAvanza">
+          <div class="cal-pallini" id="calPallini"></div>
+          <div class="cal-testo" id="calTesto">Nessuno scatto: comincia dal primo.</div>
+        </div>
+
         <div class="porte">
-          <button class="task porta" id="calScatta"><h3>Scatta ora</h3><p>Cattura qui dentro, con la tessera inclinata.</p></button>
-          <button class="task porta" id="calArchivio"><h3>Aggiungi immagini</h3><p>Anche più foto insieme, già fatte.</p></button>
+          <button class="task porta" id="calScatta"><h3>📷 Scatta</h3><p>Usa la fotocamera adesso.</p></button>
+          <button class="task porta" id="calArchivio"><h3>🖼 Carica foto</h3><p>Foto già fatte, anche più insieme.</p></button>
         </div>
         <input type="file" id="calFile" accept="image/*" multiple>
+
         <div class="cam" id="calCam" hidden>
           <div class="camwrap"><video id="calVideo" autoplay playsinline muted></video></div>
-          <p class="camhint">Inclina la tessera: <b>di fronte non funziona</b></p>
+          <p class="camhint"><b>Inclina la tessera</b> e tienila tutta dentro l'inquadratura, con un margine attorno</p>
           <div class="cam-actions">
-            <button class="go" id="calCattura">Cattura fotogramma</button>
+            <button class="go" id="calCattura">Scatta</button>
             <button class="ghost" id="calChiudi">chiudi</button>
           </div>
         </div>
+
         <ul class="cond" id="calElenco"></ul>
         <div id="calEsito"></div>
       </div>
     </section>
 
-    <p class="foot"><b>Il profilo resta su questo dispositivo</b>, nella memoria locale del browser: nessuna immagine e nessun dato vengono inviati da nessuna parte. Puoi cancellarlo quando vuoi.</p>
+    <details class="guida">
+      <summary>A che serve, e a che <b>non</b> serve</summary>
+      <p><b>Serve alla terza dimensione.</b> L'altezza di una scatola esce dal piano del riferimento, e per ricavarla l'app deve sapere quanto “vede” l'obiettivo. Quel dato si stima anche da una foto sola, ma mediandolo su più viste diventa molto più stabile.</p>
+      <p class="guida-tip"><b>Non serve alla scala, ed è il punto che si fraintende più spesso.</b> Una fotocamera calibrata dà angoli, non distanze: una scatola piccola vicina e una grande lontana proiettano la stessa immagine anche con calibrazione perfetta. <b>Il riferimento di dimensione nota resta obbligatorio sempre</b>, calibrato o no.</p>
+      <p><b>Il profilo vale per la fotocamera e lo zoom con cui l'hai fatto.</b> Se il telefono passa al grandangolo o al tele, la focale cambia — l'app confronta comunque il profilo con ogni foto e ti avvisa se non tornano.</p>
+    </details>
+
+    <p class="foot"><b>Il profilo resta su questo dispositivo</b>, nella memoria locale del browser: nessuna immagine e nessun dato vengono inviati da nessuna parte. Puoi cancellarlo quando vuoi con «ricomincia».</p>
   </section>
 
   <section class="screen" id="screen-corpo" hidden>
@@ -1761,9 +1814,28 @@ function fusioneCalibrazione(){
   return window.MisuraRileva.fondiFocali(stime);
 }
 
+const SCATTI_CONSIGLIATI = 4;
+
 function mostraCalibrazione(){
   const el=$('#calElenco'), box=$('#calEsito');
   $('#calAzzera').hidden = cal.scatti.length===0;
+
+  // avanzamento: quanti scatti **utili**, non quanti tentativi. Contare i
+  // tentativi darebbe un progresso che avanza anche quando non serve a niente.
+  const utili = cal.scatti.filter(x=>x.esito==='utile').length;
+  const ultimo = cal.scatti[cal.scatti.length-1];
+  $('#calPallini').innerHTML = Array.from({length:Math.max(SCATTI_CONSIGLIATI,utili)},
+    (_,i)=>`<i class="${i<utili?'ok':''}"></i>`).join('');
+  let testo;
+  if(!cal.scatti.length) testo = 'Nessuno scatto ancora: comincia dal primo.';
+  else if(ultimo && ultimo.esito==='troppo frontale')
+    testo = '<b>Ultimo scatto non utile:</b> la tessera era troppo di fronte. Inclinala di più e riprova.';
+  else if(ultimo && ultimo.esito==='nessuna tessera')
+    testo = '<b>Ultimo scatto non utile:</b> tessera non riconosciuta. Controlla che sia <b>tutta</b> dentro l’inquadratura, con un margine attorno.';
+  else if(utili<SCATTI_CONSIGLIATI)
+    testo = `<b>${utili} scatt${utili===1?'o':'i'} buon${utili===1?'o':'i'}.</b> Ne servono ancora ${SCATTI_CONSIGLIATI-utili}: cambia angolazione.`;
+  else testo = `<b>${utili} scatti buoni.</b> Puoi salvare il profilo qui sotto, o aggiungerne altri per stringere ancora.`;
+  $('#calTesto').innerHTML = testo;
   el.innerHTML = cal.scatti.map((x,i)=>{
     if(x.esito==='utile')
       return `<li class="si">Scatto ${i+1} <span class="tag">${x.eq35.toFixed(0)} mm eq. · ±${(100*x.stima.relativa).toFixed(2)}%</span></li>`;
