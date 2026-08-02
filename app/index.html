@@ -738,7 +738,13 @@ function rilevaAutomatico(){
     const t0 = performance.now();
     const trovate = window.MisuraRileva.rilevaTessere(dati);
     const ms = Math.round(performance.now()-t0);
-    if(!trovate.length){ state.rilevate=[]; aggiornaDiagnostica(); return; }
+    if(!trovate.length){
+      state.rilevate=[];
+      state.perche = trovate.diagnostica || null;
+      aggiornaDiagnostica();
+      return;
+    }
+    state.perche=null;
 
     // riporta le coordinate alla risoluzione piena
     const k = 1/scala;
@@ -1110,9 +1116,41 @@ function render(){
 // fotogramma trasferisce il suo errore relativo tale e quale all'oggetto (§5.2),
 // e questa riga e' il modo di vederlo prima di misurare, non dopo.
 const SIGMA_CLIC_RIFERIMENTO_PX = 2.5;  // lo stesso default del core
+// Quando il rilevamento non trova nulla, la domanda dell'utente e' "perche'?".
+// I numeri della ricerca distinguono tre situazioni con rimedi opposti: non ho
+// visto nessun contorno chiuso (contrasto), ho visto contorni ma non
+// quadrilateri (bordi spezzati, ombre), ho visto rettangoli ma con il rapporto
+// sbagliato (non e' una ID-1, oppure e' troppo di scorcio).
+function spiegaMancatoRilevamento(d){
+  if(!d) return '';
+  let causa, rimedio;
+  if(d.rapportoSbagliato>0 && d.miglioreRapporto){
+    const dev=100*d.miglioreDeviazione;
+    causa = `ho trovato <b>${d.rapportoSbagliato}</b> rettangol${d.rapportoSbagliato===1?'o':'i'}, `
+      + `ma il più simile ha rapporto <b>${d.miglioreRapporto.toFixed(3)}</b> invece di 1,586 `
+      + `(scarto ${dev.toFixed(0)}%, lato ${d.miglioreLatoPx.toFixed(0)} px)`;
+    rimedio = dev>25
+      ? 'quel rettangolo non sembra una tessera ID-1. Se lo è, fotografala <b>più di fronte</b>: molto di scorcio il rapporto apparente cambia troppo.'
+      : 'siamo vicini: rifai lo scatto un po’ più frontale, o avvicinati.';
+  } else if(d.quadrilateri>0){
+    causa = `ho trovato <b>${d.quadrilateri}</b> forme a quattro lati ma nessuna utilizzabile`;
+    rimedio = 'probabile che i bordi siano spezzati da ombre o riflessi: luce più uniforme, ed evita che qualcosa copra un angolo.';
+  } else if(d.contorni>0){
+    causa = `ho trovato <b>${d.contorni}</b> contorni chiusi, nessuno a quattro lati`;
+    rimedio = 'la tessera non si stacca dallo sfondo: appoggiala su una superficie di <b>colore diverso</b> e senza riflessi.';
+  } else {
+    causa = 'non ho trovato nessun contorno chiuso abbastanza grande';
+    rimedio = `la tessera è troppo piccola nel fotogramma o troppo poco contrastata: <b>avvicinati</b> `
+      + `(serve almeno lo 0,2% dell'area, cioè ~${Math.round(Math.sqrt(d.areaMinima*1.586))}×${Math.round(Math.sqrt(d.areaMinima/1.586))} px su questa immagine).`;
+  }
+  return `<div class="r ambiguo">⚠ <span><b>Tessera non riconosciuta.</b> ${causa}. ${rimedio}
+    <br>Puoi comunque <b>cliccare a mano</b> i due estremi del riferimento: la misura resta valida, con l'incertezza del clic.</span></div>`;
+}
+
 function aggiornaDiagnostica(){
   const diag=$('#diag');
   const righe=[];
+  if(state.perche && !state.rifAauto) righe.push(spiegaMancatoRilevamento(state.perche));
   const info=(nome,punti,col,auto)=>{
     if(punti.length!==2) return;
     const px=lungPx(...punti);

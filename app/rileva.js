@@ -423,17 +423,33 @@ function valutaQuadrilatero(v, residuo, puntiPerLato) {
  * `immagine` = {data, width, height} (una ImageData va bene tale e quale).
  * Restituisce i candidati ordinati dal piu' promettente.
  */
-function candidatiDaMaschera(catene, w, h, areaMinima, tolleranzaRapporto, mag, fuori) {
+function candidatiDaMaschera(catene, w, h, areaMinima, tolleranzaRapporto, mag, fuori, diag) {
   for (const catena of catene) {
+    diag.contorni++;
     const eps = Math.max(1.5, catena.length * 0.015);
     const p = semplificaChiusa(catena, eps);
-    if (p.length !== 4 || !convesso(p) || areaPoligono(p) < areaMinima) continue;
+    if (p.length !== 4) { diag.nonQuadrilateri++; continue; }
+    if (!convesso(p)) { diag.nonConvessi++; continue; }
+    if (areaPoligono(p) < areaMinima) { diag.troppoPiccoli++; continue; }
+    diag.quadrilateri++;
 
     const raffinato = raffinaQuadrilatero(catena, p, mag, w, h);
-    if (!raffinato) continue;
+    if (!raffinato) { diag.fitFallito++; continue; }
 
     const valutato = valutaQuadrilatero(raffinato.vertici, raffinato.residuo, raffinato.puntiPerLato);
-    if (!valutato || valutato.deviazione > tolleranzaRapporto) continue;
+    if (!valutato) { diag.fitFallito++; continue; }
+    if (valutato.deviazione > tolleranzaRapporto) {
+      // il piu' informativo di tutti: c'era un rettangolo, ma il rapporto non e'
+      // quello di una ID-1. Serve a distinguere "non vedo niente" da "vedo, ma
+      // non e' una tessera" — due problemi con rimedi opposti
+      diag.rapportoSbagliato++;
+      if (valutato.deviazione < diag.miglioreDeviazione) {
+        diag.miglioreDeviazione = valutato.deviazione;
+        diag.miglioreRapporto = valutato.rapporto;
+        diag.miglioreLatoPx = valutato.latoLungoPx;
+      }
+      continue;
+    }
     // preferisci il rapporto giusto, poi l'area: un candidato grande e con il
     // rapporto esatto e' molto piu' probabilmente la tessera di uno piccolo
     valutato.punteggio = Math.sqrt(valutato.area) * Math.exp(-valutato.deviazione * 8);
@@ -450,11 +466,29 @@ function rilevaTessere(immagine, opzioni) {
   const grigi = sfoca(aGrigi(immagine.data, w, h), w, h);
   const mag = gradiente(grigi, w, h);
   const base = otsu(grigi);
-  const livelli = o.livelli ?? [base, base - 25, base + 25];
+  // Otsu separa **due** popolazioni. Una scena reale ne ha molte — tavolo,
+  // sfondo, oggetti, ombre — e la soglia migliore per isolare la tessera puo'
+  // cadere lontano da quella globale. Si prova una scala di livelli: costa
+  // qualche decimo di secondo e recupera i casi in cui la tessera non e' il
+  // contrasto dominante dell'immagine.
+  const percentile = frazione => {
+    const h2 = new Float64Array(256);
+    for (let i = 0; i < grigi.length; i += 3) h2[Math.max(0, Math.min(255, Math.round(grigi[i])))]++;
+    let tot = 0; for (let i = 0; i < 256; i++) tot += h2[i];
+    let acc = 0;
+    for (let i = 0; i < 256; i++) { acc += h2[i]; if (acc >= tot * frazione) return i; }
+    return 128;
+  };
+  const livelli = o.livelli ?? [base, base - 30, base + 30, base - 60, base + 60,
+                                percentile(0.25), percentile(0.5), percentile(0.75)];
 
   const perimetroMinimo = Math.max(40, Math.round((w + h) * 0.06));
   const areaMinima = w * h * areaMinimaFrazione;
   const candidati = [];
+  const diag = {contorni:0, nonQuadrilateri:0, nonConvessi:0, troppoPiccoli:0,
+                quadrilateri:0, fitFallito:0, rapportoSbagliato:0,
+                miglioreDeviazione:Infinity, miglioreRapporto:null, miglioreLatoPx:null,
+                sogliaOtsu:base, areaMinima, larghezza:w, altezza:h};
   for (const soglia of livelli) {
     if (soglia <= 1 || soglia >= 254) continue;
     // la tessera puo' essere scura su chiaro o chiara su scuro: si provano
@@ -462,29 +496,40 @@ function rilevaTessere(immagine, opzioni) {
     for (const invertita of [false, true]) {
       const m = maschera(grigi, soglia, invertita);
       const catene = contorni(m, w, h, perimetroMinimo);
-      candidatiDaMaschera(catene, w, h, areaMinima, tolleranzaRapporto, mag, candidati);
+      candidatiDaMaschera(catene, w, h, areaMinima, tolleranzaRapporto, mag, candidati, diag);
     }
   }
 
   candidati.sort((a, b) => b.punteggio - a.punteggio);
-  return deduplica(candidati);
+  const tenuti = deduplica(candidati);
+  tenuti.diagnostica = diag;      // perche' non ha trovato nulla, quando non trova nulla
+  return tenuti;
 }
 
-// Lo stesso rettangolo emerge da piu' soglie: si tiene una volta sola, quella
-// col punteggio migliore.
+// Lo stesso rettangolo emerge da piu' soglie, ogni volta con un bordo un po'
+// diverso. Fra queste versioni si tiene quella che **aderisce meglio ai bordi**
+// — residuo del fit piu' basso — non quella con l'area maggiore: il punteggio
+// premia l'area perche' serve a scegliere fra oggetti *diversi*, ma fra due
+// letture dello stesso oggetto il piu' grande e' semplicemente quello con la
+// soglia piu' generosa, cioe' il piu' sbagliato.
+function centro(c) {
+  return [c.vertici.reduce((s, v) => s + v[0], 0) / 4,
+          c.vertici.reduce((s, v) => s + v[1], 0) / 4];
+}
 function deduplica(lista) {
-  const tenuti = [];
+  const gruppi = [];
   for (const c of lista) {
-    const cx = c.vertici.reduce((s, v) => s + v[0], 0) / 4;
-    const cy = c.vertici.reduce((s, v) => s + v[1], 0) / 4;
-    const vicino = tenuti.some(t => {
-      const tx = t.vertici.reduce((s, v) => s + v[0], 0) / 4;
-      const ty = t.vertici.reduce((s, v) => s + v[1], 0) / 4;
+    const [cx, cy] = centro(c);
+    const g = gruppi.find(gr => {
+      const [tx, ty] = centro(gr[0]);
       return Math.hypot(cx - tx, cy - ty) < 0.25 * Math.sqrt(c.area);
     });
-    if (!vicino) tenuti.push(c);
+    if (g) g.push(c); else gruppi.push([c]);
   }
-  return tenuti;
+  return gruppi.map(g => g.reduce((a, b) =>
+    (b.residuoPx < a.residuoPx - 1e-9) ? b
+    : (Math.abs(b.residuoPx - a.residuoPx) < 1e-9 && b.deviazione < a.deviazione) ? b
+    : a));
 }
 
 // --- 11. omografia: misurare sul piano invece che con una scala unica --------
