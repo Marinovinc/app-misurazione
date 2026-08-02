@@ -16,6 +16,12 @@
 // L'incertezza non e' inventata: viene dal **residuo del fit** delle rette, cioe'
 // da quanto i punti di bordo si discostano davvero dalla retta che li descrive.
 
+// Stesso fattore di copertura del core (k=2, ~95%): le verifiche qui sotto
+// usano il medesimo criterio di compatibilita' del doppio riferimento, cioe'
+// "lo scarto non supera k volte la propria incertezza". Non e' un parametro
+// indipendente e non va regolato a parte.
+const COPERTURA_K = 2.0;
+
 // rapporto d'aspetto ISO/IEC 7810 ID-1: 85,60 / 53,98
 const RAPPORTO_ID1 = 85.60 / 53.98;   // 1.58577...
 
@@ -545,6 +551,41 @@ function pianoTessera(lungoDaPrimoVertice) {
     : [[0, 0], [C, 0], [C, L], [0, L]];
 }
 
+function areaConSegno(p) {
+  let s = 0;
+  for (let i = 0; i < p.length; i++) {
+    const q = p[(i + 1) % p.length];
+    s += p[i][0] * q[1] - q[0] * p[i][1];
+  }
+  return s / 2;
+}
+
+/**
+ * Angoli del piano nell'ordine che **corrisponde** ai vertici rilevati.
+ *
+ * Il rilevatore restituisce i quattro vertici in ordine ciclico, ma il verso di
+ * percorrenza dipende da come il contorno e' stato tracciato: accoppiarli a un
+ * rettangolo scritto a mano produce un'omografia che manda ogni angolo su
+ * quello sbagliato. Per le sole distanze l'effetto e' mascherato — una
+ * riflessione le conserva — ma la **posa** ne esce con la normale rovesciata, e
+ * le altezze diventano negative. Qui il verso del piano viene allineato a
+ * quello dell'immagine.
+ */
+function pianoPerTessera(candidato) {
+  const piano = pianoTessera(candidato.lungoDaPrimoVertice !== false);
+  const versoImmagine = Math.sign(areaConSegno(candidato.vertici));
+  const versoPiano = Math.sign(areaConSegno(piano));
+  if (versoImmagine !== 0 && versoImmagine !== versoPiano) {
+    // Si **specchia** il rettangolo, non si inverte l'ordine dei vertici:
+    // ruotare la sequenza cambierebbe anche quale lato del piano corrisponde al
+    // primo lato in immagine, scambiando 85,60 con 53,98. L'errore che ne segue
+    // e' subdolo, perche' le proporzioni restano credibili — le dimensioni
+    // escono divise e moltiplicate per 1,586, e il volume resta plausibile.
+    return piano.map(p => [p[0], -p[1]]);
+  }
+  return piano;
+}
+
 /**
  * Lunghezza in mm di un segmento che giace sul piano della tessera, con la sua
  * incertezza propagata numericamente: si perturba ogni coordinata d'ingresso
@@ -552,7 +593,7 @@ function pianoTessera(lungoDaPrimoVertice) {
  * jacobiano calcolato per differenze finite, non una stima a occhio.
  */
 function misuraSulPiano(tessera, a, b, sigmaVertice, sigmaPunto) {
-  const piano = pianoTessera(tessera.lungoDaPrimoVertice !== false);
+  const piano = pianoPerTessera(tessera);
   const lunghezza = (vertici, pa, pb) => {
     const h = omografia(vertici, piano);
     if (!h) return null;
@@ -585,7 +626,384 @@ function misuraSulPiano(tessera, a, b, sigmaVertice, sigmaPunto) {
   return { mm: base, sigmaMm: Math.sqrt(varianza) };
 }
 
+// --- 12. focale del dispositivo da una vista del rettangolo ------------------
+//
+// I due punti di fuga delle coppie di lati opposti corrispondono a direzioni
+// che nel mondo sono **ortogonali**. Con pixel quadrati e centro ottico al
+// centro del fotogramma, l'ortogonalita' impone
+//
+//     (v1 - c) . (v2 - c) + f^2 = 0        ->    f^2 = -(v1 - c).(v2 - c)
+//
+// (Zhang & He, whiteboard scanning). Se il prodotto scalare non e' negativo la
+// configurazione e' degenere: succede quando la vista e' quasi frontale, i lati
+// opposti restano quasi paralleli e i punti di fuga scappano all'infinito. In
+// quel caso la focale **non e' determinabile**, e va detto invece di produrre
+// un numero qualsiasi.
+//
+// Attenzione a cosa NON da'. Una focale nota non fornisce la scala: una scatola
+// piccola vicina e una grande lontana proiettano la stessa immagine anche con
+// la calibrazione perfetta (§3.1). Serve a ricavare la **terza dimensione** e a
+// correggere la geometria, non a sostituire il riferimento.
+
+function intersezioneRette(p1, p2, p3, p4) {
+  const a1 = p2[1] - p1[1], b1 = p1[0] - p2[0], c1 = a1 * p1[0] + b1 * p1[1];
+  const a2 = p4[1] - p3[1], b2 = p3[0] - p4[0], c2 = a2 * p3[0] + b2 * p3[1];
+  const det = a1 * b2 - a2 * b1;
+  if (Math.abs(det) < 1e-9) return null;
+  return [(b2 * c1 - b1 * c2) / det, (a1 * c2 - a2 * c1) / det];
+}
+
+function focaleDaVertici(vertici, larghezza, altezza) {
+  const cx = larghezza / 2, cy = altezza / 2;
+  const fuga1 = intersezioneRette(vertici[0], vertici[1], vertici[3], vertici[2]);
+  const fuga2 = intersezioneRette(vertici[1], vertici[2], vertici[0], vertici[3]);
+  if (!fuga1 || !fuga2) return null;
+  const prodotto = (fuga1[0] - cx) * (fuga2[0] - cx) + (fuga1[1] - cy) * (fuga2[1] - cy);
+  if (prodotto >= 0) return null;
+  return Math.sqrt(-prodotto);
+}
+
+/**
+ * Focale in pixel con la sua incertezza, propagata perturbando i vertici.
+ * `null` quando la vista non la determina — che e' un esito legittimo, non un
+ * errore: significa "questo scatto non serve alla calibrazione, fanne un altro
+ * piu' inclinato".
+ */
+function stimaFocale(vertici, larghezza, altezza, sigmaVertice) {
+  const base = focaleDaVertici(vertici, larghezza, altezza);
+  if (base === null || !isFinite(base) || base <= 0) return null;
+
+  const delta = 0.25;
+  let varianza = 0;
+  for (let i = 0; i < 4; i++) for (let c = 0; c < 2; c++) {
+    const mossi = vertici.map(v => v.slice());
+    mossi[i][c] += delta;
+    const f = focaleDaVertici(mossi, larghezza, altezza);
+    if (f === null) return null;                 // al bordo della degenerazione
+    varianza += (((f - base) / delta) * sigmaVertice) ** 2;
+  }
+  const sigma = Math.sqrt(varianza);
+  return { fPx: base, sigmaPx: sigma, relativa: sigma / base };
+}
+
+/**
+ * Fonde piu' stime della focale: media pesata sull'inverso della varianza, che
+ * per grandezze indipendenti e' la stessa cosa che fa la GLS del core.
+ *
+ * Gli scarti si decidono su criteri **indipendenti dal risultato** (§6.3): una
+ * stima entra o no in base a quanto e' incerta *lei*, mai in base a quanto si
+ * discosta dalle altre. Scartare cio' che disaccorda restringerebbe
+ * l'incertezza in modo artificiale, e il numero finale confermerebbe se stesso.
+ * Gli scarti vengono contati e riportati.
+ */
+function fondiFocali(stime, incertezzaRelativaMassima) {
+  const limite = incertezzaRelativaMassima ?? 0.08;
+  const tenute = [], scartate = [];
+  for (const s of stime) {
+    if (!s) { scartate.push('vista non determinante'); continue; }
+    if (s.relativa > limite) { scartate.push('stima troppo incerta'); continue; }
+    tenute.push(s);
+  }
+  if (!tenute.length) return { fPx: null, tenute: 0, scartate: scartate.length, scartate_motivi: scartate };
+
+  let pesi = 0, somma = 0;
+  for (const s of tenute) {
+    const p = 1 / (s.sigmaPx * s.sigmaPx);
+    pesi += p; somma += p * s.fPx;
+  }
+  const fPx = somma / pesi;
+  const sigmaPx = Math.sqrt(1 / pesi);
+  // dispersione osservata fra le stime: se e' molto maggiore dell'incertezza
+  // dichiarata, il modello sta sottostimando qualcosa (tipicamente la
+  // distorsione, che qui non e' modellata). Si riporta, non si nasconde.
+  const media = fPx;
+  const disp = tenute.length > 1
+    ? Math.sqrt(tenute.reduce((a, s) => a + (s.fPx - media) ** 2, 0) / (tenute.length - 1))
+    : 0;
+  return {
+    fPx, sigmaPx, relativa: sigmaPx / fPx,
+    dispersionePx: disp,
+    coerenza: disp > 0 && sigmaPx > 0 ? disp / (sigmaPx * Math.sqrt(tenute.length)) : 1,
+    tenute: tenute.length, scartate: scartate.length, scartate_motivi: scartate,
+  };
+}
+
+// --- 13. la terza dimensione: altezze fuori dal piano ------------------------
+//
+// La base di una scatola appoggiata sul tavolo giace sul piano del riferimento,
+// quindi l'omografia la misura gia'. L'altezza no: esce dal piano, e nessuna
+// omografia la raggiunge. Con la focale si ricava la **posa** del piano
+// rispetto alla camera, e da li' l'altezza di un vertice che sta sulla
+// verticale sopra un punto noto della base.
+//
+// La verticale e' la normale al piano d'appoggio, non la verticale dell'immagine:
+// se il tavolo e' storto o la scatola e' inclinata, il numero e' l'altezza
+// rispetto al piano — ed e' l'unica che questa geometria puo' definire.
+
+function _matVec(M, v) {
+  return [M[0][0]*v[0] + M[0][1]*v[1] + M[0][2]*v[2],
+          M[1][0]*v[0] + M[1][1]*v[1] + M[1][2]*v[2],
+          M[2][0]*v[0] + M[2][1]*v[1] + M[2][2]*v[2]];
+}
+function _croce(a, b) {
+  return [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
+}
+function _norma(v) { return Math.hypot(v[0], v[1], v[2]); }
+function _perScalare(v, k) { return [v[0]*k, v[1]*k, v[2]*k]; }
+
+/**
+ * Posa del piano (rotazione + traslazione rispetto alla camera) dall'omografia
+ * piano->immagine e dalla focale. G e' l'omografia in forma di 9 numeri.
+ */
+function posaDaOmografia(G, fPx, cx, cy) {
+  const Kinv = [[1/fPx, 0, -cx/fPx], [0, 1/fPx, -cy/fPx], [0, 0, 1]];
+  const a1 = _matVec(Kinv, [G[0], G[3], G[6]]);
+  const a2 = _matVec(Kinv, [G[1], G[4], G[7]]);
+  const a3 = _matVec(Kinv, [G[2], G[5], G[8]]);
+  const n1 = _norma(a1), n2 = _norma(a2);
+  if (n1 < 1e-12 || n2 < 1e-12) return null;
+  const lambda = 2 / (n1 + n2);            // media delle due normalizzazioni
+  let r1 = _perScalare(a1, lambda), r2 = _perScalare(a2, lambda);
+  let t = _perScalare(a3, lambda);
+  if (t[2] < 0) { r1 = _perScalare(r1, -1); r2 = _perScalare(r2, -1); t = _perScalare(t, -1); }
+  return { r1, r2, r3: _croce(r1, r2), t };
+}
+
+/**
+ * Altezza sul piano del punto immagine `cima`, sapendo che sta sulla verticale
+ * sopra il punto del piano (X, Y). Due equazioni di proiezione, una incognita:
+ * si risolve ai minimi quadrati invece di scegliere quale delle due usare.
+ */
+function altezzaSulPiano(posa, fPx, cx, cy, X, Y, cima) {
+  const { r1, r2, r3, t } = posa;
+  const b = [X*r1[0] + Y*r2[0] + t[0], X*r1[1] + Y*r2[1] + t[1], X*r1[2] + Y*r2[2] + t[2]];
+  const u = cima[0] - cx, v = cima[1] - cy;
+  const A1 = fPx*r3[0] - u*r3[2], c1 = u*b[2] - fPx*b[0];
+  const A2 = fPx*r3[1] - v*r3[2], c2 = v*b[2] - fPx*b[1];
+  const den = A1*A1 + A2*A2;
+  if (den < 1e-12) return null;            // spigolo lungo la linea di vista
+  return (A1*c1 + A2*c2) / den;
+}
+
+/**
+ * Altezza con incertezza, propagata perturbando sia i vertici della tessera
+ * (che determinano piano e focale) sia il punto di cima.
+ *
+ * La focale viene stimata dalla **stessa** tessera che fornisce la scala: un
+ * errore sui suoi vertici entra quindi due volte, una per il piano e una per la
+ * focale. Propagare numericamente sull'ingresso comune, invece di sommare in
+ * quadratura due contributi calcolati a parte, tiene conto della correlazione
+ * anziche' ignorarla — trattare come indipendenti cose che non lo sono
+ * sottostima l'incertezza.
+ */
+function altezzaConIncertezza(verticiTessera, pianoTessera, basePiano, cima,
+                              larghezza, altezza, sigmaVertice, sigmaCima) {
+  const cx = larghezza / 2, cy = altezza / 2;
+  const calcola = (vt, pc) => {
+    const f = focaleDaVertici(vt, larghezza, altezza);
+    if (f === null) return null;
+    const G = omografia(pianoTessera, vt);
+    if (!G) return null;
+    const posa = posaDaOmografia(G, f, cx, cy);
+    if (!posa) return null;
+    return altezzaSulPiano(posa, f, cx, cy, basePiano[0], basePiano[1], pc);
+  };
+
+  const base = calcola(verticiTessera, cima);
+  if (base === null || !isFinite(base)) return null;
+
+  const delta = 0.25;
+  let varianza = 0;
+  for (let i = 0; i < 4; i++) for (let c = 0; c < 2; c++) {
+    const mossi = verticiTessera.map(v => v.slice());
+    mossi[i][c] += delta;
+    const h = calcola(mossi, cima);
+    if (h === null) return null;
+    varianza += (((h - base) / delta) * sigmaVertice) ** 2;
+  }
+  for (let c = 0; c < 2; c++) {
+    const pc = cima.slice();
+    pc[c] += delta;
+    const h = calcola(verticiTessera, pc);
+    if (h === null) return null;
+    varianza += (((h - base) / delta) * sigmaCima) ** 2;
+  }
+  return { mm: base, sigmaMm: Math.sqrt(varianza) };
+}
+
+// --- 14. la scatola e' davvero appoggiata su quel piano? ---------------------
+//
+// Tutta la misura poggia su un'ipotesi che l'utente dichiara e l'app finora
+// accettava: che la scatola stia sullo **stesso piano** della tessera. Se non e'
+// vero — scatola su un rialzo, tessera su un libro, oggetto inclinato — le
+// dimensioni escono sbagliate di parecchi percento **senza che nulla lo
+// segnali**, ed e' lo stesso meccanismo del riferimento tenuto in mano.
+//
+// Un parallelepipedo pero' e' ridondante: otto vertici per tre dimensioni. La
+// ridondanza si spende in verifiche, e ognuna produce uno **scarto in
+// millimetri** che si confronta con la propria incertezza — non con una soglia
+// scelta a mano.
+//
+// COSA QUESTE VERIFICHE NON CATTURANO, e va detto perche' e' il caso peggiore:
+// una scatola **sollevata parallelamente** al piano (su un rialzo, un altro
+// libro, un pallet) supera tutte e tre le prove. Rettificata, la sua base resta
+// un rettangolo perfetto, le facce tornano, le altezze concordano: e'
+// internamente coerente, semplicemente e' una scatola *piu' grande* su quel
+// piano. Dall'immagine i due casi sono **indistinguibili** — e' l'ambiguita' di
+// scala di §3.1 applicata alla profondita', e nessun controllo geometrico la
+// risolve. Sul banco un rialzo di appena 5 mm passa senza che nulla si muova.
+// Resta una condizione che l'utente deve garantire, non una che l'app verifica:
+// va detto nell'interfaccia, non nascosto dietro un esito verde.
+//
+// 1. **Base rettangolare.** Rettificata sul piano, la base deve avere angoli
+//    retti. Se la base non giace sul piano, l'omografia la deforma in un
+//    quadrilatero storto.
+// 2. **Facce verticali coerenti.** Riportando i vertici superiori alla quota
+//    misurata, le loro coordinate sul piano devono coincidere con quelle della
+//    base: e' il residuo di riproiezione del parallelepipedo.
+// 3. **Altezze concordi.** I quattro spigoli devono dare la stessa altezza; se
+//    divergono, la scatola e' inclinata o non e' un parallelepipedo.
+
+function _angoloTraLati(a, b, c) {
+  const u = [a[0] - b[0], a[1] - b[1]], v = [c[0] - b[0], c[1] - b[1]];
+  const nu = Math.hypot(u[0], u[1]), nv = Math.hypot(v[0], v[1]);
+  if (nu < 1e-9 || nv < 1e-9) return null;
+  const cos = Math.max(-1, Math.min(1, (u[0]*v[0] + u[1]*v[1]) / (nu*nv)));
+  return Math.acos(cos) * 180 / Math.PI;
+}
+
+/** Scarti dai 90 gradi dei quattro angoli della base rettificata. */
+function ortogonalitaBase(basePiano) {
+  const scarti = [];
+  for (let i = 0; i < 4; i++) {
+    const a = _angoloTraLati(basePiano[(i + 3) % 4], basePiano[i], basePiano[(i + 1) % 4]);
+    if (a === null) return null;
+    scarti.push(a - 90);
+  }
+  return scarti;
+}
+
+/**
+ * Interseca il raggio visivo del punto `p` col piano a quota `h` e restituisce
+ * le coordinate (X, Y) sul piano. Serve a riportare giu' i vertici superiori.
+ */
+function puntoSulPianoAQuota(posa, fPx, cx, cy, p, h) {
+  const { r1, r2, r3, t } = posa;
+  const d = [(p[0] - cx) / fPx, (p[1] - cy) / fPx, 1];
+  // X*r1 + Y*r2 + h*r3 + t = s*d  ->  tre equazioni, incognite X, Y, s
+  const o = [t[0] + h*r3[0], t[1] + h*r3[1], t[2] + h*r3[2]];
+  const M = [[r1[0], r2[0], -d[0]], [r1[1], r2[1], -d[1]], [r1[2], r2[2], -d[2]]];
+  const sol = risolvi(M, [-o[0], -o[1], -o[2]]);
+  if (!sol || !isFinite(sol[0]) || !isFinite(sol[1])) return null;
+  return [sol[0], sol[1]];
+}
+
+/**
+ * Verifica che la scatola sia coerente con l'ipotesi dichiarata. Restituisce
+ * gli scarti misurati e la loro soglia di compatibilita', derivata propagando
+ * l'incertezza dei punti — stesso criterio del doppio riferimento (§5.3):
+ * compatibile se lo scarto non supera k volte la propria incertezza.
+ */
+function verificaScatola(opts) {
+  const { verticiTessera, pianoTessera, baseImg, cimaImg,
+          larghezza, altezza, sigmaVertice, sigmaPunto } = opts;
+  const k = opts.coperturaK ?? COPERTURA_K;
+  const cx = larghezza / 2, cy = altezza / 2;
+
+  const misura = (vt, bi, ci) => {
+    const f = focaleDaVertici(vt, larghezza, altezza);
+    if (f === null) return null;
+    const H = omografia(vt, pianoTessera);
+    const G = omografia(pianoTessera, vt);
+    if (!H || !G) return null;
+    const posa = posaDaOmografia(G, f, cx, cy);
+    if (!posa) return null;
+    const base = bi.map(p => applica(H, p));
+    if (base.some(p => !p)) return null;
+    const alt = [];
+    for (let i = 0; i < 4; i++) {
+      const h = altezzaSulPiano(posa, f, cx, cy, base[i][0], base[i][1], ci[i]);
+      if (h === null) return null;
+      alt.push(h);
+    }
+    const hMedia = alt.reduce((a, b) => a + b, 0) / 4;
+    const ort = ortogonalitaBase(base);
+    if (!ort) return null;
+    // residuo: i vertici superiori riportati alla quota media devono cadere
+    // sopra quelli di base
+    let residuo = 0;
+    for (let i = 0; i < 4; i++) {
+      const q = puntoSulPianoAQuota(posa, f, cx, cy, ci[i], hMedia);
+      if (!q) return null;
+      residuo = Math.max(residuo, Math.hypot(q[0] - base[i][0], q[1] - base[i][1]));
+    }
+    const dispAlt = Math.sqrt(alt.reduce((a, b) => a + (b - hMedia) ** 2, 0) / 4);
+    return {
+      ortogonalitaMax: Math.max(...ort.map(Math.abs)),
+      residuoMm: residuo,
+      dispersioneAltezzeMm: dispAlt,
+    };
+  };
+
+  const base = misura(verticiTessera, baseImg, cimaImg);
+  if (!base) return null;
+
+  // incertezza degli scarti: si perturbano tutti gli ingressi
+  const delta = 0.25;
+  const chiavi = ['ortogonalitaMax', 'residuoMm', 'dispersioneAltezzeMm'];
+  const varianze = { ortogonalitaMax: 0, residuoMm: 0, dispersioneAltezzeMm: 0 };
+  const perturba = (lista, i, c, sigma) => {
+    const vt = verticiTessera.map(v => v.slice());
+    const bi = baseImg.map(v => v.slice());
+    const ci = cimaImg.map(v => v.slice());
+    ({ tessera: vt, base: bi, cima: ci })[lista][i][c] += delta;
+    const m = misura(vt, bi, ci);
+    if (!m) return;
+    for (const ch of chiavi) varianze[ch] += (((m[ch] - base[ch]) / delta) * sigma) ** 2;
+  };
+  for (let i = 0; i < 4; i++) for (let c = 0; c < 2; c++) {
+    perturba('tessera', i, c, sigmaVertice);
+    perturba('base', i, c, sigmaPunto);
+    perturba('cima', i, c, sigmaPunto);
+  }
+
+  const esiti = {};
+  const motivi = [];
+  for (const ch of chiavi) {
+    const u = Math.sqrt(varianze[ch]);
+    const soglia = k * u;
+    const superato = base[ch] <= soglia;
+    esiti[ch] = { scarto: base[ch], soglia, superato };
+    if (!superato) motivi.push(ch);
+  }
+  return {
+    coerente: motivi.length === 0,
+    ortogonalita: esiti.ortogonalitaMax,
+    residuoFacce: esiti.residuoMm,
+    altezzeConcordi: esiti.dispersioneAltezzeMm,
+    motivi,
+    spiegazione: motivi.length === 0 ? null : (
+      'la scatola non e\' coerente con l\'ipotesi che sia appoggiata sul piano '
+      + 'del riferimento: ' + motivi.map(m => ({
+        ortogonalitaMax: 'la base rettificata non ha angoli retti',
+        residuoMm: 'le facce verticali non tornano sopra la base',
+        dispersioneAltezzeMm: 'i quattro spigoli danno altezze diverse',
+      })[m]).join('; ')
+      + '. Cause tipiche: scatola inclinata rispetto al piano della tessera, '
+      + 'oggetto non parallelepipedo, oppure punti cliccati sugli spigoli sbagliati'
+    ),
+  };
+}
+
+// diagonale del formato 35 mm: serve solo a rendere leggibile il numero
+const DIAGONALE_35MM = 43.27;
+function equivalente35(fPx, larghezza, altezza) {
+  return DIAGONALE_35MM * fPx / Math.hypot(larghezza, altezza);
+}
+
 const API = { rilevaTessere, RAPPORTO_ID1, omografia, applica, misuraSulPiano,
+  focaleDaVertici, stimaFocale, fondiFocali, equivalente35, pianoPerTessera,
+  posaDaOmografia, altezzaSulPiano, altezzaConIncertezza, verificaScatola,
   _interni: { aGrigi, sfoca, otsu, maschera, gradiente, contorni,
               semplifica, semplificaChiusa, fitRetta, intersezione, areaPoligono, convesso } };
 
