@@ -1124,7 +1124,14 @@ const SIGMA_CLIC_RIFERIMENTO_PX = 2.5;  // lo stesso default del core
 function spiegaMancatoRilevamento(d){
   if(!d) return '';
   let causa, rimedio;
-  if(d.rapportoSbagliato>0 && d.miglioreRapporto){
+  // il caso piu' frequente sulle foto ravvicinate, e va riconosciuto per primo:
+  // se il contorno piu' esteso tocca il bordo, l'oggetto e' tagliato
+  const perimetroTipico = 0.5*(d.larghezza+d.altezza);
+  if(d.quadrilateri===0 && d.taglianoIlBordo>0 && d.maxPuntiAlBordo > perimetroTipico){
+    causa = 'il contorno più grande <b>tocca il bordo del fotogramma</b>: la tessera non ci sta tutta';
+    rimedio = '<b>Allontanati o inquadra più largo</b>, lasciando un margine attorno alla tessera. '
+      + 'Per misurare i suoi lati l’app deve vederli <b>tutti e quattro per intero</b>, angoli compresi.';
+  } else if(d.rapportoSbagliato>0 && d.miglioreRapporto){
     const dev=100*d.miglioreDeviazione;
     causa = `ho trovato <b>${d.rapportoSbagliato}</b> rettangol${d.rapportoSbagliato===1?'o':'i'}, `
       + `ma il più simile ha rapporto <b>${d.miglioreRapporto.toFixed(3)}</b> invece di 1,586 `
