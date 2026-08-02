@@ -338,3 +338,86 @@ def test_una_vista_frontale_non_determina_la_focale(tmp_path: Path) -> None:
     )
     assert completato.returncode == 0, completato.stderr
     assert json.loads(completato.stdout)["frontaleNulla"] is True
+
+
+_BANCO_SCATOLA = """
+const R = require(%s);
+// Scena fisica: tessera e scatola appoggiate sullo stesso piano, camera nota.
+function scena({f=1500, rx=0.55, ry=0.30, rz=0.12, tz=520, L=210, W=148, H=95,
+                larghezza=1200, altezza=800}){
+  const cx=Math.cos(rx), sx=Math.sin(rx), cy=Math.cos(ry), sy=Math.sin(ry);
+  const cz=Math.cos(rz), sz=Math.sin(rz);
+  const proj=p=>{
+    let [x,y,z]=p;
+    [y,z]=[y*cx-z*sx, y*sx+z*cx];
+    [x,z]=[x*cy+z*sy, -x*sy+z*cy];
+    [x,y]=[x*cz-y*sz, x*sz+y*cz];
+    const Z=z+tz;
+    return [larghezza/2+f*x/Z, altezza/2+f*y/Z];
+  };
+  const tw=[[-42.8,-26.99,0],[42.8,-26.99,0],[42.8,26.99,0],[-42.8,26.99,0]];
+  const ox=140, oy=-30;
+  const base=[[ox,oy,0],[ox+L,oy,0],[ox+L,oy+W,0],[ox,oy+W,0]];
+  return {larghezza, altezza, vero:{L,W,H},
+          tessera:tw.map(proj), base:base.map(proj),
+          cima:base.map(p=>proj([p[0],p[1],H]))};
+}
+
+const PIANO=[[-42.8,-26.99],[42.8,-26.99],[42.8,26.99],[-42.8,26.99]];
+function misura(s, sigma){
+  const Himg=R.omografia(s.tessera, PIANO);
+  const baseP=s.base.map(p=>R.applica(Himg,p));
+  const d=(a,b)=>Math.hypot(b[0]-a[0],b[1]-a[1]);
+  const L=(d(baseP[0],baseP[1])+d(baseP[3],baseP[2]))/2;
+  const W=(d(baseP[1],baseP[2])+d(baseP[0],baseP[3]))/2;
+  const alt=[];
+  for(let i=0;i<4;i++){
+    const a=R.altezzaConIncertezza(s.tessera, PIANO, baseP[i], s.cima[i],
+                                   s.larghezza, s.altezza, sigma, sigma);
+    if(a) alt.push(a);
+  }
+  const H=alt.reduce((a,b)=>a+b.mm,0)/alt.length;
+  return {L, W, H, sigmaH: alt.length?alt[0].sigmaMm:null, spigoli:alt.length};
+}
+
+const casi=JSON.parse(process.argv[2]);
+process.stdout.write(JSON.stringify(casi.map(c=>{
+  const s=scena(c);
+  const m=misura(s, c.sigma ?? 0.05);
+  return {vero:s.vero, ...m};
+})));
+"""
+
+CASI_SCATOLA: list[dict[str, Any]] = [
+    {"nome": "scatola tipica", "L": 210, "W": 148, "H": 95},
+    {"nome": "scatola bassa", "L": 300, "W": 200, "H": 40},
+    {"nome": "scatola alta", "L": 150, "W": 150, "H": 260},
+    {"nome": "grandangolo", "f": 900, "tz": 340, "L": 210, "W": 148, "H": 95},
+    {"nome": "camera piu' alta", "rx": 0.8, "tz": 620, "L": 210, "W": 148, "H": 95},
+]
+
+
+def test_tre_dimensioni_di_una_scatola_sul_piano_del_riferimento(tmp_path: Path) -> None:
+    """Base dall'omografia, **altezza dalla posa del piano** con la focale.
+
+    E' la capacita' che mancava del tutto: il core misura contorni planari, e
+    l'altezza di una scatola esce dal piano. Qui la tessera fa tre lavori — da'
+    la scala, definisce il piano d'appoggio e stima la focale — e le tre
+    dimensioni escono da una sola foto.
+    """
+    banco = tmp_path / "scatola.cjs"
+    banco.write_text(_BANCO_SCATOLA % json.dumps(_RILEVA_JS.as_posix()), encoding="utf-8")
+    completato = subprocess.run(
+        ["node", str(banco), json.dumps(CASI_SCATOLA)],
+        capture_output=True, text=True, timeout=90, check=False,
+    )
+    assert completato.returncode == 0, completato.stderr
+    esiti = json.loads(completato.stdout)
+
+    for caso, e in zip(CASI_SCATOLA, esiti, strict=True):
+        assert e["spigoli"] == 4, f"altezza non ricavata da tutti gli spigoli — {caso['nome']}"
+        for chiave in ("L", "W", "H"):
+            assert e[chiave] == pytest.approx(e["vero"][chiave], rel=1e-6), (
+                f"{caso['nome']}: {chiave} = {e[chiave]:.3f} invece di {e['vero'][chiave]}"
+            )
+        assert e["sigmaH"] > 0.0, "un'altezza senza incertezza sarebbe fiducia falsa"

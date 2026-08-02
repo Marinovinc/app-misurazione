@@ -687,6 +687,109 @@ function fondiFocali(stime, incertezzaRelativaMassima) {
   };
 }
 
+// --- 13. la terza dimensione: altezze fuori dal piano ------------------------
+//
+// La base di una scatola appoggiata sul tavolo giace sul piano del riferimento,
+// quindi l'omografia la misura gia'. L'altezza no: esce dal piano, e nessuna
+// omografia la raggiunge. Con la focale si ricava la **posa** del piano
+// rispetto alla camera, e da li' l'altezza di un vertice che sta sulla
+// verticale sopra un punto noto della base.
+//
+// La verticale e' la normale al piano d'appoggio, non la verticale dell'immagine:
+// se il tavolo e' storto o la scatola e' inclinata, il numero e' l'altezza
+// rispetto al piano — ed e' l'unica che questa geometria puo' definire.
+
+function _matVec(M, v) {
+  return [M[0][0]*v[0] + M[0][1]*v[1] + M[0][2]*v[2],
+          M[1][0]*v[0] + M[1][1]*v[1] + M[1][2]*v[2],
+          M[2][0]*v[0] + M[2][1]*v[1] + M[2][2]*v[2]];
+}
+function _croce(a, b) {
+  return [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
+}
+function _norma(v) { return Math.hypot(v[0], v[1], v[2]); }
+function _perScalare(v, k) { return [v[0]*k, v[1]*k, v[2]*k]; }
+
+/**
+ * Posa del piano (rotazione + traslazione rispetto alla camera) dall'omografia
+ * piano->immagine e dalla focale. G e' l'omografia in forma di 9 numeri.
+ */
+function posaDaOmografia(G, fPx, cx, cy) {
+  const Kinv = [[1/fPx, 0, -cx/fPx], [0, 1/fPx, -cy/fPx], [0, 0, 1]];
+  const a1 = _matVec(Kinv, [G[0], G[3], G[6]]);
+  const a2 = _matVec(Kinv, [G[1], G[4], G[7]]);
+  const a3 = _matVec(Kinv, [G[2], G[5], G[8]]);
+  const n1 = _norma(a1), n2 = _norma(a2);
+  if (n1 < 1e-12 || n2 < 1e-12) return null;
+  const lambda = 2 / (n1 + n2);            // media delle due normalizzazioni
+  let r1 = _perScalare(a1, lambda), r2 = _perScalare(a2, lambda);
+  let t = _perScalare(a3, lambda);
+  if (t[2] < 0) { r1 = _perScalare(r1, -1); r2 = _perScalare(r2, -1); t = _perScalare(t, -1); }
+  return { r1, r2, r3: _croce(r1, r2), t };
+}
+
+/**
+ * Altezza sul piano del punto immagine `cima`, sapendo che sta sulla verticale
+ * sopra il punto del piano (X, Y). Due equazioni di proiezione, una incognita:
+ * si risolve ai minimi quadrati invece di scegliere quale delle due usare.
+ */
+function altezzaSulPiano(posa, fPx, cx, cy, X, Y, cima) {
+  const { r1, r2, r3, t } = posa;
+  const b = [X*r1[0] + Y*r2[0] + t[0], X*r1[1] + Y*r2[1] + t[1], X*r1[2] + Y*r2[2] + t[2]];
+  const u = cima[0] - cx, v = cima[1] - cy;
+  const A1 = fPx*r3[0] - u*r3[2], c1 = u*b[2] - fPx*b[0];
+  const A2 = fPx*r3[1] - v*r3[2], c2 = v*b[2] - fPx*b[1];
+  const den = A1*A1 + A2*A2;
+  if (den < 1e-12) return null;            // spigolo lungo la linea di vista
+  return (A1*c1 + A2*c2) / den;
+}
+
+/**
+ * Altezza con incertezza, propagata perturbando sia i vertici della tessera
+ * (che determinano piano e focale) sia il punto di cima.
+ *
+ * La focale viene stimata dalla **stessa** tessera che fornisce la scala: un
+ * errore sui suoi vertici entra quindi due volte, una per il piano e una per la
+ * focale. Propagare numericamente sull'ingresso comune, invece di sommare in
+ * quadratura due contributi calcolati a parte, tiene conto della correlazione
+ * anziche' ignorarla — trattare come indipendenti cose che non lo sono
+ * sottostima l'incertezza.
+ */
+function altezzaConIncertezza(verticiTessera, pianoTessera, basePiano, cima,
+                              larghezza, altezza, sigmaVertice, sigmaCima) {
+  const cx = larghezza / 2, cy = altezza / 2;
+  const calcola = (vt, pc) => {
+    const f = focaleDaVertici(vt, larghezza, altezza);
+    if (f === null) return null;
+    const G = omografia(pianoTessera, vt);
+    if (!G) return null;
+    const posa = posaDaOmografia(G, f, cx, cy);
+    if (!posa) return null;
+    return altezzaSulPiano(posa, f, cx, cy, basePiano[0], basePiano[1], pc);
+  };
+
+  const base = calcola(verticiTessera, cima);
+  if (base === null || !isFinite(base)) return null;
+
+  const delta = 0.25;
+  let varianza = 0;
+  for (let i = 0; i < 4; i++) for (let c = 0; c < 2; c++) {
+    const mossi = verticiTessera.map(v => v.slice());
+    mossi[i][c] += delta;
+    const h = calcola(mossi, cima);
+    if (h === null) return null;
+    varianza += (((h - base) / delta) * sigmaVertice) ** 2;
+  }
+  for (let c = 0; c < 2; c++) {
+    const pc = cima.slice();
+    pc[c] += delta;
+    const h = calcola(verticiTessera, pc);
+    if (h === null) return null;
+    varianza += (((h - base) / delta) * sigmaCima) ** 2;
+  }
+  return { mm: base, sigmaMm: Math.sqrt(varianza) };
+}
+
 // diagonale del formato 35 mm: serve solo a rendere leggibile il numero
 const DIAGONALE_35MM = 43.27;
 function equivalente35(fPx, larghezza, altezza) {
@@ -695,6 +798,7 @@ function equivalente35(fPx, larghezza, altezza) {
 
 const API = { rilevaTessere, RAPPORTO_ID1, omografia, applica, misuraSulPiano,
   focaleDaVertici, stimaFocale, fondiFocali, equivalente35,
+  posaDaOmografia, altezzaSulPiano, altezzaConIncertezza,
   _interni: { aGrigi, sfoca, otsu, maschera, gradiente, contorni,
               semplifica, semplificaChiusa, fitRetta, intersezione, areaPoligono, convesso } };
 
