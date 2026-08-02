@@ -438,3 +438,44 @@ def test_core_js_non_fa_rete() -> None:
     sorgente = _CORE_JS.read_text(encoding="utf-8")
     for vietato in ("fetch(", "XMLHttpRequest", "WebSocket", "navigator.sendBeacon"):
         assert vietato not in sorgente, f"il core JS non deve fare rete: trovato {vietato}"
+
+
+def test_nessun_percorso_assoluto_negli_asset() -> None:
+    """L'app deve funzionare anche servita da una sottocartella.
+
+    Su GitHub Pages vive in `/nome-repo/`, e un percorso assoluto come `/core.js`
+    punta alla radice del dominio: l'app si romperebbe **solo una volta
+    pubblicata**, che e' il posto peggiore per accorgersene. In locale, servita
+    dalla radice, un percorso assoluto funziona benissimo e non segnala nulla.
+    """
+    pagina = (_RADICE / "app" / "index.html").read_text(encoding="utf-8")
+    for attributo in ('href="/', "href='/", 'src="/', "src='/"):
+        assert attributo not in pagina, f"percorso assoluto in index.html: {attributo}"
+
+    sw = (_RADICE / "app" / "sw.js").read_text(encoding="utf-8")
+    for assoluto in ("'/'", '"/"', "'/core.js'", "'/rileva.js'", "'/sw.js'"):
+        assert assoluto not in sw, f"percorso assoluto in sw.js: {assoluto}"
+
+    manifest = json.loads((_RADICE / "app" / "manifest.webmanifest").read_text(encoding="utf-8"))
+    for chiave in ("start_url", "scope"):
+        assert not manifest[chiave].startswith("/"), f"{chiave} assoluto nel manifest"
+    for icona in manifest["icons"]:
+        assert not icona["src"].startswith("/"), "icona con percorso assoluto"
+
+
+def test_gli_asset_referenziati_esistono_davvero() -> None:
+    """La cartella `app/` dev'essere pubblicabile cosi' com'e', senza il server.
+
+    Il Flask locale serve i file con rotte esplicite, quindi un riferimento a un
+    file mancante non si nota finche' non si pubblica come statico.
+    """
+    cartella = _RADICE / "app"
+    pagina = (cartella / "index.html").read_text(encoding="utf-8")
+    riferiti = set(re.findall(r'(?:src|href)="([^"#:]+)"', pagina))
+    sw = (cartella / "sw.js").read_text(encoding="utf-8")
+    riferiti |= {a for a in re.findall(r"'\./([^']+)'", sw) if a}
+
+    for nome in sorted(riferiti):
+        if nome in ("", "./"):
+            continue
+        assert (cartella / nome).is_file(), f"asset referenziato ma assente: app/{nome}"

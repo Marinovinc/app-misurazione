@@ -4,8 +4,10 @@
 // Il nome della cache E' la versione: va cambiato a ogni rilascio, altrimenti il
 // browser continua a servire la versione precedente e il deploy non arriva mai
 // all'utente.
-const CACHE = 'misura-v10';
-const ASSET = ['/', '/core.js', '/rileva.js', '/manifest.webmanifest', '/icon-512.png'];
+const CACHE = 'misura-v11';
+// Percorsi **relativi**: si risolvono rispetto alla posizione di sw.js, quindi
+// funzionano identici su localhost e in una sottocartella di GitHub Pages.
+const ASSET = ['./', './core.js', './rileva.js', './manifest.webmanifest', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSET)).then(() => self.skipWaiting()));
@@ -34,7 +36,7 @@ self.addEventListener('fetch', e => {
         const copia = risp.clone();
         caches.open(CACHE).then(c => c.put(e.request, copia));
         return risp;
-      }).catch(() => caches.match(e.request).then(c => c || caches.match('/')))
+      }).catch(() => caches.match(e.request).then(c => c || caches.match('./')))
     );
     return;
   }
@@ -45,7 +47,7 @@ self.addEventListener('fetch', e => {
         const copia = risp.clone();
         caches.open(CACHE).then(c => c.put(e.request, copia));
         return risp;
-      }).catch(() => caches.match('/'))
+      }).catch(() => caches.match('./'))
     )
   );
 });
