@@ -194,3 +194,60 @@ def test_omografia_misura_esatta_dove_la_scala_unica_sbaglia(tmp_path: Path) -> 
         f"errore {errore_scalare:.4%}"
     )
     assert d["sigma"] > 0.0
+
+
+_BANCO_AMBIGUO = """
+const R = require(%s);
+const RAP = 85.60/53.98;
+function rett(d,w,cx,cy,W,H,theta,valore){
+  const ct=Math.cos(-theta), st=Math.sin(-theta);
+  for(let y=0;y<700;y++) for(let x=0;x<w;x++){
+    const dx=x-cx, dy=y-cy;
+    const u=dx*ct-dy*st, v=dx*st+dy*ct;
+    if(Math.abs(u)<=W/2 && Math.abs(v)<=H/2){
+      const i=(y*w+x)*4; d[i]=valore; d[i+1]=valore; d[i+2]=valore;
+    }
+  }
+}
+const w=900,h=700;
+const data=new Uint8ClampedArray(w*h*4);
+for(let i=0;i<w*h;i++){ data[i*4]=235; data[i*4+1]=235; data[i*4+2]=235; data[i*4+3]=255; }
+rett(data,w,560,300,420,420/RAP,0.08,95);   // "libro": stesso rapporto, piu' grande
+rett(data,w,180,560,200,200/RAP,0.12,60);   // tessera vera
+const c = R.rilevaTessere({data,width:w,height:h});
+process.stdout.write(JSON.stringify({
+  quanti: c.length,
+  lati: c.map(x => x.latoLungoPx),
+  deviazioni: c.map(x => x.deviazione),
+}));
+"""
+
+
+def test_due_rettangoli_compatibili_restano_entrambi_candidati(tmp_path: Path) -> None:
+    """La trappola di classificazione di §5.1, in versione geometrica.
+
+    Un libro tascabile ha spesso lo stesso rapporto d'aspetto di una tessera
+    ID-1: **nessuna geometria puo' distinguerli**. Scegliendo il piu' grande, un
+    rilevatore automatico prende il libro e la scala esce sbagliata del 110% —
+    in silenzio, con un numero dall'aria perfettamente normale.
+
+    Il rilevatore non puo' risolverlo, ma non deve nasconderlo: deve restituire
+    **tutti** i candidati compatibili, cosi' che l'interfaccia possa dichiarare
+    l'ambiguita' e lasciare correggere. Se un giorno questo test trovasse un solo
+    candidato, l'app tornerebbe a scegliere senza dirlo.
+    """
+    banco = tmp_path / "ambiguo.cjs"
+    banco.write_text(_BANCO_AMBIGUO % json.dumps(_RILEVA_JS.as_posix()), encoding="utf-8")
+    completato = subprocess.run(
+        ["node", str(banco)], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert completato.returncode == 0, completato.stderr
+    d = json.loads(completato.stdout)
+
+    assert d["quanti"] >= 2, "i candidati ambigui devono restare tutti disponibili"
+    lati = sorted(d["lati"])
+    assert lati[0] == pytest.approx(200, abs=2)
+    assert lati[-1] == pytest.approx(420, abs=2)
+    # entrambi passano il filtro sul rapporto: e' proprio questo a renderli
+    # indistinguibili, e il motivo per cui la scelta va dichiarata
+    assert all(dev < 0.05 for dev in d["deviazioni"])

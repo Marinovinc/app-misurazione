@@ -124,6 +124,8 @@
   .diag .r{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--muted);flex-wrap:wrap;}
   .diag .r b{font-family:var(--mono);font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums;}
   .diag .nota{font-size:12px;color:var(--faint);font-style:italic;}
+  .diag .ambiguo{background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);
+    border-radius:8px;padding:9px 11px;color:var(--ink);align-items:flex-start;line-height:1.45;}
 
   .manca{font-size:12.5px;color:var(--muted);margin:9px 0 0;}
   .manca[hidden]{display:none;}
@@ -686,7 +688,7 @@ function rilevaAutomatico(){
 
     // riporta le coordinate alla risoluzione piena
     const k = 1/scala;
-    state.rilevate = trovate.slice(0,2).map(t=>({
+    state.rilevate = trovate.slice(0,4).map(t=>({
       vertici: t.vertici.map(v=>[v[0]*k, v[1]*k]),
       lungoDaPrimoVertice: t.lungoDaPrimoVertice,
       estremi: t.estremiLatoLungo.map(v=>[v[0]*k, v[1]*k]),
@@ -701,6 +703,7 @@ function rilevaAutomatico(){
     // il migliore diventa il riferimento A; se serve il secondo e ce n'e' un
     // altro, diventa B — sono due rettangoli distinti, quindi due riferimenti
     // distinti nel senso di §5.3
+    state.sceltoA = 0;
     state.rifA = state.rilevate[0].estremi.map(p=>p.slice());
     state.rifAauto = state.rilevate[0];
     $('#tipoA').value='id1_lungo'; $('#campoLatoA').style.display='none';
@@ -773,10 +776,36 @@ function segnaManuale(nome){
   if(nome==='rifB') state.rifBauto=null;
 }
 
+function dentroPoligono(p, poly){
+  let dentro=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const [xi,yi]=poly[i], [xj,yj]=poly[j];
+    if(((yi>p[1])!==(yj>p[1])) && (p[0] < (xj-xi)*(p[1]-yi)/(yj-yi)+xi)) dentro=!dentro;
+  }
+  return dentro;
+}
+function candidatoSotto(p){
+  if(!state.rilevate) return -1;
+  for(let i=0;i<state.rilevate.length;i++){
+    if(i===state.sceltoA) continue;
+    if(dentroPoligono(p, state.rilevate[i].vertici)) return i;
+  }
+  return -1;
+}
+function scegliCandidato(i){
+  state.sceltoA=i;
+  state.rifAauto=state.rilevate[i];
+  state.rifA=state.rilevate[i].estremi.map(q=>q.slice());
+  render(); aggiornaBottone(); aggiornaHint(); aggiornaModo();
+  if($('#esito').querySelector('.card') && !btn.disabled) btn.click();
+}
+
 ov.addEventListener('pointerdown',ev=>{
   if(!state.dataUrl) return;
   ev.preventDefault();
   const p=coordinate(ev);
+  const altro=candidatoSotto(p);
+  if(altro>=0 && !puntoVicino(p)){ scegliCandidato(altro); return; }
   const esistente=puntoVicino(p);
   if(esistente){
     trascinato=esistente;
@@ -934,8 +963,23 @@ function quadrilatero(q,col){
   return `<polygon points="${pts}" fill="${col}" fill-opacity="0.10" stroke="${col}" `
     +`stroke-width="${r*0.3}" stroke-dasharray="${r*1.2} ${r*0.8}"/>`;
 }
+// I candidati non scelti restano disegnati in trasparenza. Nessuna geometria
+// distingue una tessera da un libro con lo stesso rapporto d'aspetto (§5.1): se
+// l'app ne trova due e sceglie da sola, l'unica difesa e' che si veda che ha
+// scelto, e che l'altra opzione sia a un tocco di distanza.
+function candidatiScartati(){
+  if(!state.rilevate || state.rilevate.length<2 || !state.rifAauto) return '';
+  const r=state.natW*0.006+2;
+  return state.rilevate.map((c,i)=>{
+    if(i===state.sceltoA) return '';
+    const pts=c.vertici.map(v=>v.join(',')).join(' ');
+    return `<polygon points="${pts}" fill="${colore('--faint')}" fill-opacity="0.06" `
+      +`stroke="${colore('--faint')}" stroke-width="${r*0.25}" stroke-dasharray="${r} ${r}"/>`;
+  }).join('');
+}
 function render(){
-  ov.innerHTML = quadrilatero(state.rifAauto, colore('--accent'))
+  ov.innerHTML = candidatiScartati()
+               + quadrilatero(state.rifAauto, colore('--accent'))
                + quadrilatero(state.rifBauto, colore('--rifb'))
                + segmento(state.rifA, colore('--accent'), false)
                + segmento(state.rifB, colore('--rifb'), false)
@@ -970,6 +1014,12 @@ function aggiornaDiagnostica(){
     righe.push(`<div class="r"><span class="puntino" style="background:${colore('--warn')}"></span>`
       +`Oggetto <b>${lungPx(...state.punti).toFixed(0)} px</b></div>`);
 
+  if(state.rilevate && state.rilevate.length>1 && state.rifAauto){
+    righe.push('<div class="r ambiguo">⚠ <span>Trovati <b>'+state.rilevate.length
+      +'</b> rettangoli compatibili con una tessera ID-1: sto usando il più grande. '
+      +'Nessuna geometria distingue una tessera da un libro con lo stesso rapporto — '
+      +'<b>se ho scelto quello sbagliato, tocca l’altro sull’immagine</b>.</span></div>');
+  }
   if(righe.length){
     const auto = state.rifAauto || state.rifBauto;
     righe.push('<div class="nota">'
