@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>app-misurazione · misura interattiva</title>
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0b7f93">
 <script src="core.js"></script>
 <script src="rileva.js"></script>
@@ -1204,7 +1204,9 @@ document.querySelectorAll('.task[data-go]').forEach(b=>b.addEventListener('click
 mostra();
 
 // --- service worker: offline, nessuna rete a runtime ---
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
+// Registrazione relativa: su GitHub Pages l'app vive in una sottocartella
+// (/nome-repo/), e un percorso assoluto punterebbe alla radice del dominio.
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
 </script>
 </body>
 </html>
