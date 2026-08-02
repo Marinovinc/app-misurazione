@@ -678,9 +678,11 @@ function rilevaAutomatico(){
     const k = 1/scala;
     state.rilevate = trovate.slice(0,2).map(t=>({
       vertici: t.vertici.map(v=>[v[0]*k, v[1]*k]),
+      lungoDaPrimoVertice: t.lungoDaPrimoVertice,
       estremi: t.estremiLatoLungo.map(v=>[v[0]*k, v[1]*k]),
       latoPx: t.latoLungoPx*k,
-      sigmaPx: t.sigmaLatoPx*k,
+      sigmaPx: t.sigmaLatoPx*k,      // per la scala unica: include l'obliquita'
+      sigmaFitPx: t.sigmaFitPx*k,   // per l'omografia: sola localizzazione del vertice
       deviazione: t.deviazione,
       residuoPx: t.residuoPx*k,
     }));
@@ -997,7 +999,13 @@ btn.addEventListener('click',()=>{
   const sigmaSegPx=parseFloat($('#sigmaseg').value);
   let esito;
   try{
-    if(state.doppio){
+    // Con i quattro vertici della tessera si misura **sul piano**: la scala non
+    // e' piu' un unico mm/px valido solo al centro, ma la conversione esatta
+    // punto per punto. Su una ripresa inclinata la differenza e' di qualche
+    // percento, e cresce quanto piu' l'oggetto e' lontano dal riferimento.
+    if(state.rifAauto && !state.doppio){
+      esito=misuraConOmografia(tolleranzaMm, sigmaSegPx);
+    } else if(state.doppio){
       esito=window.MisuraCore.misuraDoppioRiferimento({
         tipoA:$('#tipoA').value, latoPersonalizzatoA:parseFloat($('#latoA').value),
         latoRifAPx:lungPx(...state.rifA),
@@ -1018,6 +1026,33 @@ btn.addEventListener('click',()=>{
   renderEsito(esito);
   aggiornaModo(esito);
 });
+
+// La tolleranza dimensionale della tessera non entra nell'omografia, che assume
+// le dimensioni esatte: va aggiunta a valle come sorgente indipendente, con lo
+// stesso trattamento GUM di tipo B del core (limite / radice di 3).
+const TOLLERANZA_ID1_MM = 0.10;
+function misuraConOmografia(tolleranzaMm, sigmaSegPx){
+  const t = state.rifAauto;
+  const m = window.MisuraRileva.misuraSulPiano(
+    {vertici: t.vertici, lungoDaPrimoVertice: t.lungoDaPrimoVertice},
+    // sigma del **fit**, non quella con l'obliquita': il termine di obliquita'
+    // misura quanto la scala uniforme sia inadatta a una vista inclinata, e
+    // l'omografia quella inadeguatezza la elimina. Sommarlo qui sarebbe contare
+    // due volte lo stesso effetto, una volta come errore e una come incertezza.
+    state.punti[0], state.punti[1], t.sigmaFitPx, sigmaSegPx);
+  if(!m) throw new Error('la geometria del riferimento non permette di rettificare il piano');
+
+  const relativaDimensione = (TOLLERANZA_ID1_MM/Math.sqrt(3))/85.60;
+  const sigma = Math.hypot(m.sigmaMm, m.mm*relativaDimensione);
+  const grandezza = window.MisuraCore.GrandezzaIncerta.daDeviazione(m.mm, sigma);
+  const esito = window.MisuraCore.valuta(grandezza, tolleranzaMm, 2.0);
+  esito.provenienza = "Misurata dall'app";
+  esito.metodo = 'omografia';
+  esito.lato_target_px = lungPx(...state.punti).toFixed(1);
+  esito.scala_mm_px = (m.mm/lungPx(...state.punti)).toFixed(4);
+  esito.scala_inc_mm_px = (sigma/lungPx(...state.punti)).toFixed(4);
+  return esito;
+}
 
 function gauge(U,T){ const m=Math.max(T,U)*1.3; return {b:50-T/m*50, u:50-U/m*50}; }
 function renderEsito(d){
@@ -1052,6 +1087,8 @@ function renderEsito(d){
       h+=`<div><div class="k">Doppio riferimento</div><div class="v">verificato · ${d.divergenza_mm_px} ≤ ${d.soglia_mm_px} mm/px</div></div>`;
     // la transizione di modalita' viaggia col dato, come l'incertezza (§4.3):
     // sopravvive allo screenshot e al copia-incolla
+    if(d.metodo==='omografia')
+      h+=`<div><div class="k">Metodo</div><div class="v">piano rettificato dai 4 vertici — nessuna approssimazione di scala uniforme</div></div>`;
     if(d.degradata_da)
       h+=`<div><div class="k">Transizione di modalità</div><div class="v">da certificata a stima, su conferma esplicita</div></div>`;
     h+=`</div></div>`;
