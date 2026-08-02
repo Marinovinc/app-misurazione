@@ -276,6 +276,10 @@
         <h3>Misura una scatola <span class="badge ok">tre dimensioni</span></h3>
         <p>Tessera appoggiata sul tavolo accanto alla scatola. Base dal piano rettificato, altezza dalla focale ricavata dalla tessera stessa. Una foto sola.</p>
       </button>
+      <button class="task" data-go="calibra">
+        <h3>Calibra la fotocamera <span class="badge">consigliato</span></h3>
+        <p>Qualche scatto della tessera da angolazioni diverse. Serve alla terza dimensione: la focale si stima meglio su più viste che su una sola. Non sostituisce il riferimento.</p>
+      </button>
       <button class="task" data-go="corpo">
         <h3>Misure corporee <span class="badge">input manuale</span></h3>
         <p>Manichino con le linee di misura. In questa fase i valori sono solo quelli che inserisci tu, marcati come tali — nessuna misura corporea è calcolata.</p>
@@ -448,6 +452,45 @@
   <div id="esito"></div>
 
   <p class="foot"><b>Limiti dichiarati.</b> La scala viene dal riferimento che clicchi tu: l'app non rileva i bordi da sola, e i tuoi clic hanno l'incertezza che dichiari qui accanto. La modalità certificata qui significa <b>acquisizione live in-app + due riferimenti distinti le cui scale concordano</b> — non promette l'1%, che richiederebbe anche cattura guidata e un profilo di calibrazione per modello di dispositivo. Nessuna immagine lascia il dispositivo.</p>
+  </section>
+
+  <section class="screen" id="screen-calibra" hidden>
+    <header>
+      <div class="brand">app-misurazione</div>
+      <h1>Calibra la fotocamera</h1>
+      <p class="sub">Fotografa la tessera da <b>angolazioni diverse</b>, inclinata. Da ogni scatto si ricava la focale dell'obiettivo; su più viste l'incertezza si stringe.</p>
+    </header>
+
+    <details class="guida">
+      <summary>A che serve, e a che <b>non</b> serve</summary>
+      <p><b>Serve</b> alla terza dimensione. L'altezza di una scatola esce dal piano del riferimento, e per ricavarla occorre sapere quanto “vede” l'obiettivo. La focale si può stimare da una foto sola, ma mediandola su più viste diventa molto più stabile.</p>
+      <p class="guida-tip"><b>Non serve alla scala, e questo è il punto da non fraintendere.</b> Una fotocamera calibrata dà angoli, non distanze: una scatola piccola vicina e una grande lontana proiettano la stessa immagine anche con calibrazione perfetta. <b>Il riferimento di dimensione nota resta obbligatorio sempre</b>, calibrato o no.</p>
+      <p><b>Come scattare:</b> tessera ben visibile e inclinata, non frontale — vista di fronte i lati opposti restano paralleli e la focale non è determinabile, e l'app te lo dirà. Cambia angolazione a ogni scatto. Cinque o sei viste utili bastano.</p>
+      <p><b>Attenzione all'obiettivo:</b> il profilo vale per la fotocamera e lo zoom con cui l'hai fatto. Se il telefono passa al grandangolo o al tele, o se usi lo zoom, la focale cambia — l'app confronta comunque il profilo con ogni foto e segnala se non tornano.</p>
+    </details>
+
+    <section class="panel">
+      <div class="panel-h"><span>Scatti di calibrazione</span><button class="ghost" id="calAzzera" hidden>azzera</button></div>
+      <div class="panel-b">
+        <div class="porte">
+          <button class="task porta" id="calScatta"><h3>Scatta ora</h3><p>Cattura qui dentro, con la tessera inclinata.</p></button>
+          <button class="task porta" id="calArchivio"><h3>Aggiungi immagini</h3><p>Anche più foto insieme, già fatte.</p></button>
+        </div>
+        <input type="file" id="calFile" accept="image/*" multiple>
+        <div class="cam" id="calCam" hidden>
+          <div class="camwrap"><video id="calVideo" autoplay playsinline muted></video></div>
+          <p class="camhint">Inclina la tessera: <b>di fronte non funziona</b></p>
+          <div class="cam-actions">
+            <button class="go" id="calCattura">Cattura fotogramma</button>
+            <button class="ghost" id="calChiudi">chiudi</button>
+          </div>
+        </div>
+        <ul class="cond" id="calElenco"></ul>
+        <div id="calEsito"></div>
+      </div>
+    </section>
+
+    <p class="foot"><b>Il profilo resta su questo dispositivo</b>, nella memoria locale del browser: nessuna immagine e nessun dato vengono inviati da nessuna parte. Puoi cancellarlo quando vuoi.</p>
   </section>
 
   <section class="screen" id="screen-corpo" hidden>
@@ -1235,6 +1278,27 @@ function riferimentoDentroLaScatola(){
       || (state.cima.length===4 && dentroPoligono(c,state.cima));
 }
 
+// Confronto fra la focale del profilo e quella stimata dalla foto corrente,
+// con lo stesso criterio del doppio riferimento: compatibili se lo scarto non
+// supera k volte l'incertezza della differenza.
+function confrontaConProfilo(t){
+  const prof=leggiProfilo();
+  if(!prof) return {stato:'assente'};
+  const RL=window.MisuraRileva;
+  const s=RL.stimaFocale(t.vertici, state.natW, state.natH, t.sigmaFitPx);
+  if(!s) return {stato:'foto non determinante', profiloEq:null};
+  const lato=Math.max(state.natW, state.natH);
+  const fFoto=s.fPx/lato, uFoto=s.sigmaPx/lato;
+  const fProf=prof.fRelativa, uProf=prof.sigmaRelativa;
+  const scarto=Math.abs(fFoto-fProf), u=Math.hypot(uFoto,uProf), soglia=2*u;
+  if(scarto>soglia) return {stato:'discorde', scarto, soglia, fFoto, fProf};
+  // concordi: media pesata, come per due riferimenti che si confermano
+  const p1=1/(uFoto*uFoto), p2=1/(uProf*uProf);
+  const fusa=(fFoto*p1+fProf*p2)/(p1+p2), uFusa=Math.sqrt(1/(p1+p2));
+  return {stato:'concorde', scarto, soglia, fusaRelativa:fusa, uFusaRelativa:uFusa,
+          miglioramento:uFoto/uFusa};
+}
+
 function misuraScatola(){
   const t=state.rifAauto;
   if(!t) throw new Error('per la scatola serve la tessera riconosciuta: la sua forma definisce il piano e la focale');
@@ -1269,6 +1333,11 @@ function misuraScatola(){
   const disp=Math.sqrt(alt.reduce((a,b)=>a+(b.mm-Hm)**2,0)/alt.length);
   const uH=Math.hypot(uProp, disp);
 
+  // Il profilo, se c'e', non sostituisce la focale della foto: la verifica.
+  // Discordi significa che l'obiettivo non e' quello calibrato — zoom, altra
+  // fotocamera — e usare il profilo darebbe un'altezza sbagliata in silenzio.
+  const confrontoFocale = confrontaConProfilo(t);
+
   const verifica=RL.verificaScatola({verticiTessera:t.vertici, pianoTessera:piano,
     baseImg:state.base, cimaImg:state.cima, larghezza:state.natW, altezza:state.natH,
     sigmaVertice:t.sigmaFitPx, sigmaPunto});
@@ -1285,7 +1354,7 @@ function misuraScatola(){
       {nome:'Larghezza', mm:W, u:uW?uW.sigmaMm:null},
       {nome:'Altezza',   mm:Hm, u:uH},
     ],
-    verifica, provenienza:"Misurata dall'app", metodo:'omografia',
+    verifica, confrontoFocale, provenienza:"Misurata dall'app", metodo:'omografia',
     volumeLitri:(L*W*Hm)/1e6,
   };
 }
@@ -1501,8 +1570,21 @@ function renderScatola(d){
     pochi millimetri — supera tutti i controlli qui sopra, perché dall'immagine è indistinguibile da
     una scatola più grande appoggiata sul piano. Questo devi garantirlo tu.</span></div>`;
 
+  const cf=d.confrontoFocale;
+  if(cf && cf.stato==='discorde'){
+    h+=`<div class="callout crit"><span class="ic">!</span><span><b>La fotocamera non sembra quella calibrata.</b>
+      La focale ricavata da questa foto non concorda col profilo salvato (scarto ${(100*cf.scarto/cf.fProf).toFixed(1)}%,
+      soglia ${(100*cf.soglia/cf.fProf).toFixed(1)}%). Probabile zoom attivo o obiettivo diverso — grandangolo o tele.
+      La misura qui sopra usa la focale <b>di questa foto</b>, non il profilo.</span></div>`;
+  } else if(cf && cf.stato==='concorde'){
+    h+=`<div class="callout"><span class="ic">✓</span><span>La focale di questa foto concorda col profilo calibrato.</span></div>`;
+  }
   h+=`<div class="meta"><div><div class="k">Provenienza</div><div class="v">${d.provenienza}</div></div>
-    <div><div class="k">Metodo</div><div class="v">base dal piano rettificato, altezza dalla posa e dalla focale</div></div></div>`;
+    <div><div class="k">Metodo</div><div class="v">base dal piano rettificato, altezza dalla posa e dalla focale</div></div>
+    <div><div class="k">Calibrazione</div><div class="v">${
+      !cf || cf.stato==='assente' ? 'nessun profilo: focale da questa foto'
+      : cf.stato==='concorde' ? 'profilo confermato da questa foto'
+      : 'profilo presente ma non concorde'}</div></div></div>`;
 
   h+=`<div class="salva"><button class="ghost" id="salvaImg">⤓ Salva immagine annotata</button>
     <small>Le tre dimensioni, le incertezze e l'esito della verifica finiscono <b>dentro</b> il file.</small></div></div>`;
@@ -1569,10 +1651,139 @@ function renderEsito(d){
   box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
+
+// --- calibrazione della fotocamera ------------------------------------------
+//
+// Il profilo NON sostituisce la stima dalla singola foto: la **verifica**. Su
+// ogni misura si confrontano le due focali col criterio del doppio riferimento
+// — compatibili se lo scarto non supera k volte l'incertezza della differenza.
+// Concordi si fondono e l'incertezza si stringe; discordi si dichiara, perche'
+// vuol dire che l'obiettivo non e' quello calibrato: telefono passato al
+// grandangolo, zoom attivo, altra fotocamera.
+const CHIAVE_PROFILO = 'misura.profilo.fotocamera';
+const cal = { scatti: [] };
+
+function leggiProfilo(){
+  try{ const g=localStorage.getItem(CHIAVE_PROFILO); return g?JSON.parse(g):null; }
+  catch(e){ return null; }
+}
+function salvaProfilo(p){
+  try{ localStorage.setItem(CHIAVE_PROFILO, JSON.stringify(p)); return true; }
+  catch(e){ return false; }
+}
+function cancellaProfilo(){
+  try{ localStorage.removeItem(CHIAVE_PROFILO); }catch(e){}
+}
+
+// aggiunge uno scatto: rileva la tessera, stima la focale, registra l'esito
+async function aggiungiScattoCalibrazione(dataUrl){
+  const im = new Image();
+  im.src = dataUrl;
+  await new Promise(r=>{ im.onload=r; im.onerror=r; });
+  if(!im.naturalWidth) return;
+  const k = Math.min(1, 1600/Math.max(im.naturalWidth, im.naturalHeight));
+  const cw = Math.round(im.naturalWidth*k), ch = Math.round(im.naturalHeight*k);
+  const c = document.createElement('canvas'); c.width=cw; c.height=ch;
+  const ctx = c.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(im,0,0,cw,ch);
+  const trovate = window.MisuraRileva.rilevaTessere(ctx.getImageData(0,0,cw,ch));
+
+  if(!trovate.length){ cal.scatti.push({esito:'nessuna tessera'}); mostraCalibrazione(); return; }
+  const t = trovate[0];
+  const s = window.MisuraRileva.stimaFocale(t.vertici, cw, ch, t.sigmaFitPx);
+  if(!s){
+    // non e' un errore: e' una vista che non determina la focale
+    cal.scatti.push({esito:'troppo frontale', deviazione:t.deviazione});
+    mostraCalibrazione(); return;
+  }
+  cal.scatti.push({
+    esito:'utile', stima:s, larghezza:cw, altezza:ch,
+    eq35: window.MisuraRileva.equivalente35(s.fPx, cw, ch),
+    // normalizzata sul lato lungo: rende confrontabili scatti a risoluzioni diverse
+    fRelativa: s.fPx/Math.max(cw,ch),
+    sigmaRelativa: s.sigmaPx/Math.max(cw,ch),
+  });
+  mostraCalibrazione();
+}
+
+function fusioneCalibrazione(){
+  const utili = cal.scatti.filter(x=>x.esito==='utile');
+  if(!utili.length) return null;
+  // si fondono le focali **normalizzate** sul lato lungo: scatti a risoluzioni
+  // diverse descrivono lo stesso obiettivo solo in quella forma
+  const stime = utili.map(x=>({fPx:x.fRelativa, sigmaPx:x.sigmaRelativa,
+                               relativa:x.sigmaRelativa/x.fRelativa}));
+  return window.MisuraRileva.fondiFocali(stime);
+}
+
+function mostraCalibrazione(){
+  const el=$('#calElenco'), box=$('#calEsito');
+  $('#calAzzera').hidden = cal.scatti.length===0;
+  el.innerHTML = cal.scatti.map((x,i)=>{
+    if(x.esito==='utile')
+      return `<li class="si">Scatto ${i+1} <span class="tag">${x.eq35.toFixed(0)} mm eq. · ±${(100*x.stima.relativa).toFixed(2)}%</span></li>`;
+    if(x.esito==='troppo frontale')
+      return `<li class="no">Scatto ${i+1} — vista troppo frontale, non determina la focale <span class="tag">inclina di più</span></li>`;
+    return `<li class="no">Scatto ${i+1} — tessera non riconosciuta</li>`;
+  }).join('');
+
+  const f=fusioneCalibrazione();
+  if(!f || !f.fPx){ box.innerHTML=''; return; }
+  const rel=100*f.relativa;
+  // il contributo che questa incertezza porta all'altezza di una scatola: e' il
+  // numero che dice davvero quando fermarsi, invece di una soglia inventata
+  const buono = rel < 1.0;
+  box.innerHTML = `<div class="card ${buono?'good':'warn'}">
+    <div class="card-head"><span class="pill ${buono?'good':'warn'}"><span class="dot"></span>
+      ${f.tenute} scatt${f.tenute===1?'o':'i'} utili${f.scartate?` · ${f.scartate} scartati`:''}</span></div>
+    <div class="readout"><span class="val">±${rel.toFixed(2)}</span><span class="unit">%</span>
+      <span class="pm">sulla focale</span></div>
+    <p class="whisper">${buono
+      ? 'Basta così: sotto l’1% il contributo della focale all’altezza di una scatola è marginale rispetto ai clic sugli spigoli.'
+      : 'Aggiungi qualche scatto da angolazioni diverse per stringere ancora.'}
+      ${f.coerenza>2 ? ' <b>Le stime però si disperdono più di quanto dichiarino</b>: probabile distorsione dell’obiettivo, che qui non è modellata.' : ''}</p>
+    <div class="salva"><button class="go" id="calSalva">Salva il profilo di questo dispositivo</button>
+      <small>Resta nella memoria locale del browser. Nessun dato esce.</small></div></div>`;
+  $('#calSalva').addEventListener('click',()=>{
+    const ok=salvaProfilo({fRelativa:f.fPx, sigmaRelativa:f.sigmaPx,
+      scatti:f.tenute, quando:new Date().toISOString()});
+    $('#calSalva').textContent = ok?'✓ profilo salvato':'memoria non disponibile';
+    $('#calSalva').disabled = true;
+  });
+}
+
+// porte della calibrazione
+let calStream=null;
+$('#calArchivio').addEventListener('click',()=>$('#calFile').click());
+$('#calFile').addEventListener('change',async()=>{
+  for(const f of $('#calFile').files){
+    const url=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(f); });
+    await aggiungiScattoCalibrazione(url);
+  }
+  $('#calFile').value='';
+});
+$('#calScatta').addEventListener('click',async()=>{
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) return;
+  try{
+    calStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:4096}}});
+    $('#calVideo').srcObject=calStream; $('#calCam').hidden=false;
+  }catch(e){}
+});
+function chiudiCalCam(){ if(calStream){calStream.getTracks().forEach(t=>t.stop());calStream=null;} $('#calCam').hidden=true; }
+$('#calChiudi').addEventListener('click',chiudiCalCam);
+$('#calCattura').addEventListener('click',async()=>{
+  const v=$('#calVideo');
+  if(!v.videoWidth) return;
+  const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);
+  await aggiungiScattoCalibrazione(c.toDataURL('image/png'));
+});
+$('#calAzzera').addEventListener('click',()=>{ cal.scatti=[]; cancellaProfilo(); mostraCalibrazione(); });
+
 // --- router a hash + navigazione tra schermi ---
-const schermi={home:'screen-home',oggetto:'screen-oggetto',scatola:'screen-oggetto',corpo:'screen-corpo'};
+const schermi={home:'screen-home',oggetto:'screen-oggetto',scatola:'screen-oggetto',calibra:'screen-calibra',corpo:'screen-corpo'};
 const navback=$('#navback'), navtitle=$('#navtitle');
-const titoli={home:'app-misurazione',oggetto:'Misura oggetto',scatola:'Misura scatola',corpo:'Misure corporee'};
+const titoli={home:'app-misurazione',oggetto:'Misura oggetto',scatola:'Misura scatola',calibra:'Calibrazione',corpo:'Misure corporee'};
 function vai(nome){ location.hash = nome==='home' ? '' : '#/'+nome; }
 function mostra(){
   const richiesto=(location.hash.replace('#/','')||'home');
