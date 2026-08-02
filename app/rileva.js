@@ -426,6 +426,20 @@ function valutaQuadrilatero(v, residuo, puntiPerLato) {
 function candidatiDaMaschera(catene, w, h, areaMinima, tolleranzaRapporto, mag, fuori, diag) {
   for (const catena of catene) {
     diag.contorni++;
+    // Un contorno che tocca il bordo del fotogramma non e' il perimetro di un
+    // oggetto: e' un oggetto **tagliato**, e il tracciamento ne segue il bordo
+    // dell'immagine. Si semplifica in molti vertici e non diventa mai un
+    // quadrilatero. E' il caso piu' comune sulle foto ravvicinate, e senza
+    // riconoscerlo la diagnosi dice "nessun quadrilatero" quando la causa vera
+    // e' "la tessera non ci sta tutta".
+    let tocca = false;
+    for (const q of catena) {
+      if (q[0] <= 1 || q[1] <= 1 || q[0] >= w - 2 || q[1] >= h - 2) { tocca = true; break; }
+    }
+    if (tocca) {
+      diag.taglianoIlBordo++;
+      if (catena.length > diag.maxPuntiAlBordo) diag.maxPuntiAlBordo = catena.length;
+    }
     const eps = Math.max(1.5, catena.length * 0.015);
     const p = semplificaChiusa(catena, eps);
     if (p.length !== 4) { diag.nonQuadrilateri++; continue; }
@@ -485,7 +499,8 @@ function rilevaTessere(immagine, opzioni) {
   const perimetroMinimo = Math.max(40, Math.round((w + h) * 0.06));
   const areaMinima = w * h * areaMinimaFrazione;
   const candidati = [];
-  const diag = {contorni:0, nonQuadrilateri:0, nonConvessi:0, troppoPiccoli:0,
+  const diag = {contorni:0, taglianoIlBordo:0, maxPuntiAlBordo:0,
+                nonQuadrilateri:0, nonConvessi:0, troppoPiccoli:0,
                 quadrilateri:0, fitFallito:0, rapportoSbagliato:0,
                 miglioreDeviazione:Infinity, miglioreRapporto:null, miglioreLatoPx:null,
                 sogliaOtsu:base, areaMinima, larghezza:w, altezza:h};
