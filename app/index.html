@@ -7,6 +7,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#0b7f93">
 <script src="core.js"></script>
+<script src="rileva.js"></script>
 <style>
   :root {
     --bg:#eef1f2; --surface:#fff; --surface-2:#f6f8f9; --ink:#0f171c; --muted:#5c6b72;
@@ -57,6 +58,12 @@
   .guida ol{margin:0 0 4px;padding-left:22px;display:flex;flex-direction:column;gap:9px;color:var(--ink);font-size:13.8px;}
   .guida li{line-height:1.5;}
   .guida-tip{margin:12px 0 16px;padding:11px 13px;background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 26%,transparent);border-radius:8px;font-size:13px;line-height:1.5;color:var(--ink);}
+  .guida .serve{margin:2px 0 14px;font-size:13.8px;color:var(--ink);line-height:1.55;}
+  .guida-passi{gap:14px !important;}
+  .guida-passi>li{padding-left:2px;}
+  .guida-passi>li>b:first-child{color:var(--accent-ink);}
+  .attenzione{display:block;margin-top:7px;padding:9px 11px;border-radius:7px;background:var(--warn-bg);
+    border-left:3px solid var(--warn);font-size:12.8px;line-height:1.5;}
   .brand{font-family:var(--mono);font-weight:600;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);}
   h1{font-size:clamp(21px,3.4vw,27px);margin:4px 0 0;font-weight:640;letter-spacing:-.01em;}
   .sub{color:var(--muted);font-size:14px;margin:6px 0 0;max-width:66ch;}
@@ -79,6 +86,11 @@
   .cam{margin-top:12px;}
   .camwrap{position:relative;line-height:0;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#000;}
   .camwrap video{width:100%;height:auto;display:block;}
+  .conto{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.32);
+    font-family:var(--mono);font-weight:600;font-size:clamp(64px,18vw,130px);color:#fff;
+    text-shadow:0 2px 20px rgba(0,0,0,.65);line-height:1;pointer-events:none;}
+  .conto[hidden]{display:none;}
+  .conto.ultimi{color:#ffd9a0;background:rgba(0,0,0,.45);}
   .camhint{font-size:12.5px;color:var(--muted);margin:8px 0 0;text-align:center;text-wrap:balance;}
   .camsel{display:flex;gap:10px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--muted);}
   .camsel[hidden]{display:none;}
@@ -105,6 +117,13 @@
   .ora-txt{flex:1;min-width:0;}
   .ora-txt b{display:block;font-size:15px;line-height:1.3;}
   .ora-txt small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px;}
+
+  /* diagnostica dei clic: quanti pixel, e cosa costano in incertezza */
+  .diag{margin-top:12px;border-top:1px dashed var(--line-strong);padding-top:11px;display:flex;flex-direction:column;gap:6px;}
+  .diag[hidden]{display:none;}
+  .diag .r{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--muted);flex-wrap:wrap;}
+  .diag .r b{font-family:var(--mono);font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .diag .nota{font-size:12px;color:var(--faint);font-style:italic;}
 
   .manca{font-size:12.5px;color:var(--muted);margin:9px 0 0;}
   .manca[hidden]{display:none;}
@@ -151,10 +170,21 @@
   .puntino.a{background:var(--accent);}
   .puntino.b{background:var(--rifb);}
   .rif .field:last-child{margin-bottom:0;}
+  .rif-h .ruolo{margin-left:auto;text-transform:none;letter-spacing:0;font-size:11px;color:var(--faint);}
+  .spiega{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:0 14px;margin-bottom:14px;}
+  .spiega>summary{cursor:pointer;padding:11px 0;font-size:13.5px;font-weight:640;list-style:none;display:flex;align-items:center;gap:8px;}
+  .spiega>summary::-webkit-details-marker{display:none;}
+  .spiega>summary::before{content:"›";color:var(--accent);font-size:18px;line-height:1;transition:transform .2s;}
+  .spiega[open]>summary::before{transform:rotate(90deg);}
+  .spiega p{margin:0 0 10px;font-size:13px;color:var(--muted);line-height:1.55;}
+  .spiega p b{color:var(--ink);}
+  .spiega .guida-tip{margin-bottom:13px;}
   .toggle{display:flex;gap:9px;align-items:flex-start;font-size:13px;color:var(--ink);margin-bottom:14px;cursor:pointer;}
   .toggle input{margin-top:3px;flex:none;accent-color:var(--accent);}
   .toggle small{display:block;color:var(--muted);font-size:12.3px;margin-top:2px;}
   .toggle.bloccato{cursor:default;opacity:.9;}
+  .opz{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);
+    border:1px solid var(--line-strong);border-radius:999px;padding:1px 7px;margin-left:5px;}
 
   /* controls */
   .field{margin-bottom:14px;}
@@ -247,13 +277,28 @@
   </ol>
 
   <details class="guida">
-    <summary>Prima di iniziare — cosa serve e perché</summary>
-    <ol>
-      <li><b>Un riferimento di dimensione nota</b>, appoggiato <b>accanto all'oggetto e sullo stesso piano</b>: una tessera ID-1 (bancomat, fedeltà, trasporti — 85,60 × 53,98 mm in tutto il mondo) o qualcosa che misuri col righello. Senza, l'app non può conoscere la scala: una foto da sola non contiene informazioni metriche.</li>
-      <li><b>Meglio due riferimenti</b>, su <b>oggetti distinti</b>. Con due, l'app calcola due scale e le confronta: se non concordano te lo dice invece di darti un numero sbagliato, e se concordano l'incertezza si stringe. È anche la condizione per la modalità certificata.</li>
-      <li><b>Un oggetto piatto</b>, o la cui misura giace sul piano del riferimento. L'app misura contorni planari, non le tre dimensioni di un solido.</li>
+    <summary>Guida — cosa serve e cosa fare, passo per passo</summary>
+
+    <p class="serve"><b>Ti serve:</b> un <b>oggetto piatto</b> da misurare (o una misura che giace su un piano); <b>un riferimento di dimensione nota</b> — meglio due, distinti — appoggiato <b>accanto all'oggetto, sullo stesso piano</b>. Va benissimo una tessera ID-1: bancomat, fedeltà, biblioteca, trasporti.</p>
+
+    <ol class="guida-passi">
+      <li><b>Immagine.</b> <i>Scatta ora</i> cattura il fotogramma qui dentro ed è l'unico caso in cui l'app può affermare che l'acquisizione è live. <i>Scegli un'immagine</i> prende una foto già fatta e resta sempre modalità stima. Inquadra tutto: oggetto e riferimenti devono starci per intero.</li>
+
+      <li><b>Riferimento A</b> — è lui a dare la scala, ed è obbligatorio.
+        <br>Prima <b>dichiara nel menu quale dimensione</b> stai per cliccare (lato lungo 85,60 mm, lato corto 53,98 mm, o una dimensione tua). Poi <b>clicca i due estremi di quella dimensione</b> sull'immagine: compare un segmento azzurro. L'app divide i millimetri dichiarati per i pixel misurati e ottiene il cambio mm/pixel di tutta la foto.
+        <br><span class="attenzione">Gli angoli delle tessere sono <b>arrotondati</b> (raggio 3,18 mm): cliccandoli prendi il punto dove inizia la curva e accorci il lato di ~3 mm, cioè il <b>3,7%</b> di errore. Clicca invece <b>al centro dei due bordi corti</b>, dove il profilo è dritto.</span></li>
+
+      <li><b>Riferimento B</b> — facoltativo, e serve a <b>controllare A</b>, non a misurare.
+        <br>Stessa procedura su un <b>oggetto diverso</b> (segmento viola). L'app ricava una seconda scala e la confronta con la prima: se concordano le fonde e <b>l'incertezza scende</b>; se non concordano sa che uno dei due è sbagliato — ma non quale — e <b>non ti dà nessun numero</b>. Con un solo riferimento quell'errore resterebbe invisibile.
+        <br>È la condizione per la modalità certificata. Se ne hai uno solo, usa <i>ne ho uno solo</i> e prosegui in stima.</li>
+
+      <li><b>Oggetto.</b> Clicca i due estremi della misura che ti serve (segmento arancione). Dev'essere sul piano del riferimento.</li>
+
+      <li><b>Misura.</b> Leggi <b>valore ± incertezza</b> e l'esito: entro tolleranza, fuori tolleranza, oppure non misurabile. L'incertezza è espansa a k=2, cioè circa il 95%: fa parte del dato, non della schermata.</li>
     </ol>
+
     <p class="guida-tip"><b>L'errore più facile da fare.</b> Il riferimento tenuto in mano, o comunque più vicino alla fotocamera dell'oggetto, produce un errore di scala sistematico — di solito qualche percento — che <b>nessuna incertezza dichiarata cattura</b>, perché non è rumore ma un bias. Appoggialo sullo stesso piano. Su superfici curve la tessera è tangente al piano e la sua proiezione è distorta.</p>
+    <p class="guida-tip"><b>Più grande è il riferimento nel fotogramma, meglio è.</b> L'errore relativo che fai cliccandolo si trasferisce <i>tale e quale</i> all'oggetto: sotto l'immagine trovi quanto costa, riferimento per riferimento. Un riferimento piccolo accanto a un oggetto grande amplifica l'errore assoluto.</p>
   </details>
 
   <!-- 1 · acquisizione: e' la porta a determinare la modalita' -->
@@ -273,7 +318,7 @@
       <input type="file" id="file" accept="image/*">
 
       <div class="cam" id="cam" hidden>
-        <div class="camwrap"><video id="video" autoplay playsinline muted></video></div>
+        <div class="camwrap"><video id="video" autoplay playsinline muted></video><div class="conto" id="conto" hidden></div></div>
         <p class="camhint"><b>Inquadra tutta la scena</b> — l'oggetto e i riferimenti devono starci per intero, appoggiati sullo stesso piano. Allontanati finché ci sta tutto. <br><b>Con una webcam da scrivania</b> il campo è stretto e non si può allargare oltre l'obiettivo: per scene ampie conviene il telefono, o scattare la foto e caricarla da <i>Scegli un'immagine</i>.</p>
         <p class="camres" id="camres"></p>
         <div class="camsel" id="camsel" hidden>
@@ -290,6 +335,7 @@
         </div>
         <div class="cam-actions">
           <button class="go" id="capture">Cattura fotogramma</button>
+          <button class="ghost" id="autoscatto" hidden>Autoscatto 15 s</button>
           <button class="ghost" id="camClose">annulla</button>
         </div>
       </div>
@@ -316,6 +362,7 @@
           <div class="imgwrap"><img id="img" alt="immagine acquisita"><svg id="ov" preserveAspectRatio="xMidYMid meet"></svg></div>
         </div>
         <div class="hint" id="hint" hidden></div>
+        <div class="diag" id="diag" hidden></div>
       </div>
     </section>
 
@@ -323,14 +370,24 @@
     <section class="panel">
       <div class="panel-h"><span>3 · Riferimenti e criterio</span></div>
       <div class="panel-b">
+        <details class="spiega">
+          <summary>Che cos'è un «riferimento»?</summary>
+          <p>Una fotografia <b>non contiene misure</b>: un oggetto piccolo vicino e uno grande lontano danno la stessa immagine. Serve qualcosa nella foto di cui si conosca già la dimensione vera. Quello è il riferimento: dai suoi pixel l'app ricava <b>quanti millimetri vale un pixel</b>, e con quel cambio converte l'oggetto.</p>
+          <p><b>Riferimento A</b> è quello obbligatorio — senza, non esiste nessuna misura. Una tessera formato ID-1 va benissimo: bancomat, fedeltà, biblioteca, trasporti. È rigida, resta piana, e ha la stessa dimensione in tutto il mondo.</p>
+          <p class="guida-tip"><b>Perché 85,60 × 53,98 e non «85 × 55».</b> È lo standard <b>ISO/IEC 7810, formato ID-1</b>, e nasce in pollici: 53,98 mm sono 2,125" esatti. Le tolleranze di produzione sono strette — 85,47÷85,72 mm sul lato lungo, 53,92÷54,03 sul corto — quindi il lato corto non arriva mai a 55. Arrotondare a 55 sposterebbe la scala dell'<b>1,9%</b>: su 500 mm sono 9 mm di errore <b>sistematico</b>, che l'incertezza dichiarata non cattura, perché misura il rumore dei tuoi clic e non un dato sbagliato in partenza. Se la tua tessera misura diverso, non è una ID-1: usa <i>Altra dimensione nota</i>.</p>
+          <p><b>Riferimento B</b> è facoltativo e serve a <b>controllare il primo</b>. L'app calcola la scala due volte, una per riferimento, e le confronta: se concordano ti dà la misura con incertezza <i>minore</i> di entrambe; se non concordano sa che uno dei due è sbagliato — ma non quale — e <b>rifiuta di darti un numero</b>. Con un solo riferimento quell'errore resterebbe invisibile.</p>
+          <p class="guida-tip">B dev'essere un <b>oggetto diverso</b> da A: i due lati della stessa tessera non servono, perché condividono piano, distanza e distorsione, e concorderebbero anche sbagliando insieme. Vanno bene una seconda tessera, un foglio A4 (210 × 297 mm), o una lunghezza che misuri col righello.</p>
+        </details>
+
         <label class="toggle" id="toggleDoppio">
           <input type="checkbox" id="usaDoppio">
-          <span><b>Verifica con un secondo riferimento</b>
-            <small>Due riferimenti su <b>oggetti distinti</b> danno due scale: se non concordano l'app rifiuta la misura, se concordano l'incertezza si stringe. Richiesto per la modalità certificata.</small></span>
+          <span><b>Verifica con un secondo riferimento</b> <span class="opz">facoltativo</span>
+            <small>Due riferimenti su <b>oggetti distinti</b> danno due scale: se non concordano l'app rifiuta la misura, se concordano l'incertezza si stringe. È l'unico modo che l'app ha di accorgersi che la scala è sbagliata.
+            <br><b>Ne hai uno solo?</b> Lascia la casella vuota: l'app misura lo stesso, in modalità stima. Serve solo a rinunciare alla certificata.</small></span>
         </label>
 
         <div class="rif" id="rifBoxA">
-          <div class="rif-h"><span class="puntino a"></span><span>Riferimento A</span></div>
+          <div class="rif-h"><span class="puntino a"></span><span>Riferimento A</span><span class="ruolo">obbligatorio · dà la scala</span></div>
           <div class="field">
             <label for="tipoA">Dimensione nota</label>
             <select id="tipoA">
@@ -343,7 +400,7 @@
         </div>
 
         <div class="rif" id="rifBoxB" hidden>
-          <div class="rif-h"><span class="puntino b"></span><span>Riferimento B</span></div>
+          <div class="rif-h"><span class="puntino b"></span><span>Riferimento B</span><span class="ruolo">controlla il primo</span></div>
           <div class="field">
             <label for="tipoB">Dimensione nota</label>
             <select id="tipoB">
@@ -422,17 +479,21 @@ function impostaOrigine(o){
   state.origine=o;
   portaScatto.setAttribute('aria-pressed', String(o==='scatto'));
   portaArchivio.setAttribute('aria-pressed', String(o==='archivio'));
-  // il doppio riferimento e' la condizione che rende possibile la certificata:
-  // con lo scatto in-app parte attivo. Toglierlo resta possibile, ma e' un'azione
-  // esplicita dell'utente e il banner dichiara subito che si scende a stima.
-  if(o==='scatto' && !chkDoppio.checked){ chkDoppio.checked=true; }
+  // Il doppio riferimento e' la condizione che rende possibile la certificata,
+  // quindi con lo scatto in-app parte attivo — ma **solo finche' l'utente non si
+  // e' espresso**. Chi ha un riferimento solo lo dice una volta, non a ogni
+  // scatto: riproporglielo ogni volta trasformerebbe una verifica utile in un
+  // ostacolo, e la strada piu' rapida per far ignorare un controllo e' imporlo.
+  if(o==='scatto' && !chkDoppio.checked && !sceltaDoppioEspressa){ chkDoppio.checked=true; }
   state.doppio=chkDoppio.checked;
   rifBoxB.hidden=!state.doppio;
   ricomincia.hidden=false;
   aggiornaModo();
 }
 
+let sceltaDoppioEspressa=false;   // l'utente ha deciso lui: non si ridiscute
 chkDoppio.addEventListener('change',()=>{
+  sceltaDoppioEspressa=true;
   state.doppio=chkDoppio.checked;
   rifBoxB.hidden=!state.doppio;
   state.rifB=[];
@@ -519,9 +580,13 @@ async function elencaFotocamere(){
   }catch(e){ camsel.hidden=true; }
 }
 selCam.addEventListener('change',()=>apriCam(selCam.value));
-function chiudiCam(){ if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;} cam.hidden=true; }
+function chiudiCam(){
+  if(typeof fermaAutoscatto==='function') fermaAutoscatto();
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  cam.hidden=true;
+}
 camClose.addEventListener('click',chiudiCam);
-capture.addEventListener('click',()=>{
+function scatta(){
   if(!video.videoWidth){ setHint('⚠ la fotocamera non è ancora pronta'); return; }
   const c=document.createElement('canvas');
   c.width=video.videoWidth; c.height=video.videoHeight;
@@ -529,10 +594,42 @@ capture.addEventListener('click',()=>{
   const dataUrl=c.toDataURL('image/png');
   chiudiCam();
   // l'origine 'scatto' si scrive QUI, non alla pressione della porta: e' l'unico
-  // punto in cui l'app sa di aver catturato lei il fotogramma.
+  // punto in cui l'app sa di aver catturato lei il fotogramma. Vale anche per
+  // l'autoscatto: il fotogramma lo prende sempre l'app, dal proprio stream.
   impostaOrigine('scatto');
   state.dataUrl=dataUrl; img.src=dataUrl;
+}
+capture.addEventListener('click',scatta);
+
+// Autoscatto: serve dove la fotocamera e' ferma e sei tu a doverti spostare.
+// Su un telefono lo tieni in mano, quindi si mostra solo dove il puntatore e'
+// fine (mouse), non su touch.
+const SECONDI_AUTOSCATTO=15;
+const autoscatto=$('#autoscatto'), conto=$('#conto');
+let timerScatto=null;
+autoscatto.hidden = window.matchMedia('(pointer: coarse)').matches;
+
+autoscatto.addEventListener('click',()=>{
+  if(timerScatto){ fermaAutoscatto(); return; }
+  let restano=SECONDI_AUTOSCATTO;
+  mostraConto(restano);
+  autoscatto.textContent='annulla autoscatto';
+  timerScatto=setInterval(()=>{
+    restano-=1;
+    if(restano<=0){ fermaAutoscatto(); scatta(); return; }
+    mostraConto(restano);
+  },1000);
 });
+function mostraConto(n){
+  conto.hidden=false;
+  conto.textContent=n;
+  conto.classList.toggle('ultimi', n<=3);
+}
+function fermaAutoscatto(){
+  if(timerScatto){ clearInterval(timerScatto); timerScatto=null; }
+  conto.hidden=true; conto.classList.remove('ultimi');
+  autoscatto.textContent='Autoscatto '+SECONDI_AUTOSCATTO+' s';
+}
 
 function caricaFile(f){
   const r=new FileReader();
@@ -546,7 +643,66 @@ img.addEventListener('load',()=>{
   stage.classList.add('show');
   azzeraPunti();
   aggiornaModo();
+  rilevaAutomatico();
 });
+
+// --- rilevamento automatico della tessera -----------------------------------
+// Le dimensioni della ID-1 sono note, quindi il riferimento non ha bisogno di
+// essere cliccato: si cerca un rettangolo con il rapporto giusto e si fittano i
+// suoi quattro lati. E' molto piu' preciso del clic (l'errore scende da ~0,8% a
+// ~0,01%) e soprattutto **elimina l'errore degli angoli arrotondati**, che nel
+// percorso manuale vale il 3,7% e nessuno si accorge di commettere.
+//
+// Il candidato migliore viene usato subito, senza chiedere conferma — ma
+// l'app mostra sempre **che cosa** ha riconosciuto: il quadrilatero resta
+// disegnato e la scheda dichiara la provenienza. Automatico non vuol dire
+// silenzioso: se avesse preso un libro al posto della tessera, si vede.
+const LATO_MASSIMO_RILEVAMENTO = 1600;
+function rilevaAutomatico(){
+  if(!window.MisuraRileva || !state.dataUrl) return;
+  try{
+    const scala = Math.min(1, LATO_MASSIMO_RILEVAMENTO/Math.max(state.natW,state.natH));
+    const cw = Math.round(state.natW*scala), ch = Math.round(state.natH*scala);
+    const c = document.createElement('canvas');
+    c.width=cw; c.height=ch;
+    const ctx = c.getContext('2d', {willReadFrequently:true});
+    ctx.drawImage(img,0,0,cw,ch);
+    const dati = ctx.getImageData(0,0,cw,ch);
+
+    const t0 = performance.now();
+    const trovate = window.MisuraRileva.rilevaTessere(dati);
+    const ms = Math.round(performance.now()-t0);
+    if(!trovate.length){ state.rilevate=[]; aggiornaDiagnostica(); return; }
+
+    // riporta le coordinate alla risoluzione piena
+    const k = 1/scala;
+    state.rilevate = trovate.slice(0,2).map(t=>({
+      vertici: t.vertici.map(v=>[v[0]*k, v[1]*k]),
+      estremi: t.estremiLatoLungo.map(v=>[v[0]*k, v[1]*k]),
+      latoPx: t.latoLungoPx*k,
+      sigmaPx: t.sigmaLatoPx*k,
+      deviazione: t.deviazione,
+      residuoPx: t.residuoPx*k,
+    }));
+    state.msRilevamento = ms;
+
+    // il migliore diventa il riferimento A; se serve il secondo e ce n'e' un
+    // altro, diventa B — sono due rettangoli distinti, quindi due riferimenti
+    // distinti nel senso di §5.3
+    state.rifA = state.rilevate[0].estremi.map(p=>p.slice());
+    state.rifAauto = state.rilevate[0];
+    $('#tipoA').value='id1_lungo'; $('#campoLatoA').style.display='none';
+    if(state.doppio && state.rilevate[1]){
+      state.rifB = state.rilevate[1].estremi.map(p=>p.slice());
+      state.rifBauto = state.rilevate[1];
+      $('#tipoB').value='id1_lungo'; $('#campoLatoB').style.display='none';
+      state.fase='target';
+    } else {
+      state.fase = state.doppio ? 'rifB' : 'target';
+    }
+    render(); aggiornaBottone(); aggiornaHint(); aggiornaModo();
+  }catch(e){ /* il rilevamento e' un aiuto: se fallisce restano i clic */ }
+}
 
 ov.addEventListener('click',ev=>{
   if(!state.dataUrl) return;
@@ -555,6 +711,10 @@ ov.addEventListener('click',ev=>{
   const lista = state.fase==='rifA' ? state.rifA : state.fase==='rifB' ? state.rifB : state.punti;
   if(lista.length>=2) lista.length=0;
   lista.push(p);
+  // un clic sul riferimento sostituisce il rilevamento: da quel momento la
+  // provenienza di quel riferimento e' manuale, con la sigma del clic
+  if(state.fase==='rifA') state.rifAauto=null;
+  if(state.fase==='rifB') state.rifBauto=null;
   if(lista.length===2){
     if(state.fase==='rifA') state.fase = state.doppio ? 'rifB' : 'target';
     else if(state.fase==='rifB') state.fase = 'target';
@@ -566,6 +726,7 @@ reset.addEventListener('click',azzeraPunti);
 
 function azzeraPunti(){
   state.rifA=[]; state.rifB=[]; state.punti=[]; state.fase='rifA';
+  state.rifAauto=null; state.rifBauto=null; state.rilevate=[];
   $('#esito').innerHTML=''; err.hidden=true;
   render(); aggiornaBottone(); aggiornaHint();
 }
@@ -672,10 +833,59 @@ function segmento(punti,col,tratteggio){
   punti.forEach(p=>{ s+=`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${col}" stroke="#fff" stroke-width="${r*0.35}"/>`; });
   return s;
 }
+function quadrilatero(q,col){
+  if(!q) return '';
+  const r=state.natW*0.006+2;
+  const pts=q.vertici.map(v=>v.join(',')).join(' ');
+  return `<polygon points="${pts}" fill="${col}" fill-opacity="0.10" stroke="${col}" `
+    +`stroke-width="${r*0.3}" stroke-dasharray="${r*1.2} ${r*0.8}"/>`;
+}
 function render(){
-  ov.innerHTML = segmento(state.rifA, colore('--accent'), false)
+  ov.innerHTML = quadrilatero(state.rifAauto, colore('--accent'))
+               + quadrilatero(state.rifBauto, colore('--rifb'))
+               + segmento(state.rifA, colore('--accent'), false)
                + segmento(state.rifB, colore('--rifb'), false)
                + segmento(state.punti, colore('--warn'), true);
+  aggiornaDiagnostica();
+}
+
+// Quanti pixel misura ogni riferimento, e **quanto costa** in incertezza.
+// Non c'e' una soglia inventata: il contributo e' semplicemente sigma/lato, il
+// numero che poi entra davvero nel calcolo. Un riferimento piccolo nel
+// fotogramma trasferisce il suo errore relativo tale e quale all'oggetto (§5.2),
+// e questa riga e' il modo di vederlo prima di misurare, non dopo.
+const SIGMA_CLIC_RIFERIMENTO_PX = 2.5;  // lo stesso default del core
+function aggiornaDiagnostica(){
+  const diag=$('#diag');
+  const righe=[];
+  const info=(nome,punti,col,auto)=>{
+    if(punti.length!==2) return;
+    const px=lungPx(...punti);
+    const sigma = auto ? auto.sigmaPx : SIGMA_CLIC_RIFERIMENTO_PX;
+    const rel=px>0 ? (sigma/px)*100 : 0;
+    const fonte = auto
+      ? `<span class="tag">rilevato · rapporto a ${(auto.deviazione*100).toFixed(2)}% da 1,586</span>`
+      : '<span class="tag">cliccato</span>';
+    righe.push(`<div class="r"><span class="puntino" style="background:${col}"></span>`
+      +`${nome} <b>${px.toFixed(0)} px</b> → la scala eredita <b>±${rel.toFixed(rel<0.1?3:2)}%</b> `
+      +`dalla localizzazione ${fonte}</div>`);
+  };
+  info('Riferimento A', state.rifA, colore('--accent'), state.rifAauto);
+  info('Riferimento B', state.rifB, colore('--rifb'), state.rifBauto);
+  if(state.punti.length===2)
+    righe.push(`<div class="r"><span class="puntino" style="background:${colore('--warn')}"></span>`
+      +`Oggetto <b>${lungPx(...state.punti).toFixed(0)} px</b></div>`);
+
+  if(righe.length){
+    const auto = state.rifAauto || state.rifBauto;
+    righe.push('<div class="nota">'
+      + (auto ? 'Il riferimento rilevato è localizzato sui bordi con precisione sub-pixel, e il vertice nasce dall’intersezione dei lati: gli angoli arrotondati non falsano più la misura. '
+              : 'σ 2,5 px sul clic del riferimento. ')
+      + 'Più pixel occupa il riferimento, meno incertezza porta: avvicinati, o usane uno più grande.</div>');
+  }
+
+  diag.innerHTML=righe.join('');
+  diag.hidden = righe.length===0;
 }
 function setHint(a,b){ hint.hidden=false; hint.innerHTML = a + (b?` <span class="tag">${b}</span>`:''); }
 
@@ -725,11 +935,13 @@ function aggiornaModo(esito){
 // Il calcolo e' interamente CLIENT-ONLY: `core.js`, nessuna richiesta di rete,
 // nessun server. L'immagine non lascia il dispositivo perche' non va da nessuna
 // parte — non perche' qualcuno promette di non guardarla.
-const lungPx=(a,b)=>Math.hypot(b[0]-a[0],b[1]-a[1]);
+// dichiarata, non `const`: viene usata anche dalla diagnostica, che sta più su
+function lungPx(a,b){ return Math.hypot(b[0]-a[0],b[1]-a[1]); }
 
 function optsSingolo(){
   return { tipo:$('#tipoA').value, latoPersonalizzato:parseFloat($('#latoA').value),
     latoRifPx:lungPx(...state.rifA), latoTargetPx:lungPx(...state.punti),
+    sigmaRifPx: state.rifAauto ? state.rifAauto.sigmaPx : 2.5,
     sigmaSegPx:parseFloat($('#sigmaseg').value), tolleranzaMm:parseFloat($('#tolreq').value) };
 }
 
@@ -791,11 +1003,14 @@ btn.addEventListener('click',()=>{
         latoRifAPx:lungPx(...state.rifA),
         tipoB:$('#tipoB').value, latoPersonalizzatoB:parseFloat($('#latoB').value),
         latoRifBPx:lungPx(...state.rifB),
+        sigmaRifAPx: state.rifAauto ? state.rifAauto.sigmaPx : 2.5,
+        sigmaRifBPx: state.rifBauto ? state.rifBauto.sigmaPx : 2.5,
         latoTargetPx:lungPx(...state.punti), sigmaSegPx, tolleranzaMm });
     } else {
       esito=window.MisuraCore.misuraManuale({
         tipo:$('#tipoA').value, latoPersonalizzato:parseFloat($('#latoA').value),
         latoRifPx:lungPx(...state.rifA),
+        sigmaRifPx: state.rifAauto ? state.rifAauto.sigmaPx : 2.5,
         latoTargetPx:lungPx(...state.punti), sigmaSegPx, tolleranzaMm });
     }
   }catch(e){ err.hidden=false; err.textContent=e.message||String(e); return; }

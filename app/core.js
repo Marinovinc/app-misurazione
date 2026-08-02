@@ -204,9 +204,13 @@ function misuraDegradataAStima(opts, conferma) {
 function misuraDoppioRiferimento(opts) {
   const rifA = riferimentoManuale(opts.tipoA, opts.latoPersonalizzatoA);
   const rifB = riferimentoManuale(opts.tipoB, opts.latoPersonalizzatoB);
-  const sigmaRif = opts.sigmaRifPx ?? 2.5;
-  const prima = scalaDaLatoPixel(rifA.latoMm, rifA.tolleranzaMm, opts.latoRifAPx, sigmaRif);
-  const seconda = scalaDaLatoPixel(rifB.latoMm, rifB.tolleranzaMm, opts.latoRifBPx, sigmaRif);
+  // sigma per riferimento, non una sola: un riferimento rilevato dai bordi e uno
+  // cliccato a mano hanno precisioni che differiscono di due ordini di grandezza,
+  // e mediarle butterebbe via l'informazione che la fusione GLS sa usare
+  const sigmaA = opts.sigmaRifAPx ?? opts.sigmaRifPx ?? 2.5;
+  const sigmaB = opts.sigmaRifBPx ?? opts.sigmaRifPx ?? 2.5;
+  const prima = scalaDaLatoPixel(rifA.latoMm, rifA.tolleranzaMm, opts.latoRifAPx, sigmaA);
+  const seconda = scalaDaLatoPixel(rifB.latoMm, rifB.tolleranzaMm, opts.latoRifBPx, sigmaB);
 
   const confronto = confrontaScale(prima, seconda, opts.coperturaK);
   if (confronto.tipo === 'ScaleDiscordi') {
