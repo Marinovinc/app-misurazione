@@ -585,7 +585,116 @@ function misuraSulPiano(tessera, a, b, sigmaVertice, sigmaPunto) {
   return { mm: base, sigmaMm: Math.sqrt(varianza) };
 }
 
+// --- 12. focale del dispositivo da una vista del rettangolo ------------------
+//
+// I due punti di fuga delle coppie di lati opposti corrispondono a direzioni
+// che nel mondo sono **ortogonali**. Con pixel quadrati e centro ottico al
+// centro del fotogramma, l'ortogonalita' impone
+//
+//     (v1 - c) . (v2 - c) + f^2 = 0        ->    f^2 = -(v1 - c).(v2 - c)
+//
+// (Zhang & He, whiteboard scanning). Se il prodotto scalare non e' negativo la
+// configurazione e' degenere: succede quando la vista e' quasi frontale, i lati
+// opposti restano quasi paralleli e i punti di fuga scappano all'infinito. In
+// quel caso la focale **non e' determinabile**, e va detto invece di produrre
+// un numero qualsiasi.
+//
+// Attenzione a cosa NON da'. Una focale nota non fornisce la scala: una scatola
+// piccola vicina e una grande lontana proiettano la stessa immagine anche con
+// la calibrazione perfetta (§3.1). Serve a ricavare la **terza dimensione** e a
+// correggere la geometria, non a sostituire il riferimento.
+
+function intersezioneRette(p1, p2, p3, p4) {
+  const a1 = p2[1] - p1[1], b1 = p1[0] - p2[0], c1 = a1 * p1[0] + b1 * p1[1];
+  const a2 = p4[1] - p3[1], b2 = p3[0] - p4[0], c2 = a2 * p3[0] + b2 * p3[1];
+  const det = a1 * b2 - a2 * b1;
+  if (Math.abs(det) < 1e-9) return null;
+  return [(b2 * c1 - b1 * c2) / det, (a1 * c2 - a2 * c1) / det];
+}
+
+function focaleDaVertici(vertici, larghezza, altezza) {
+  const cx = larghezza / 2, cy = altezza / 2;
+  const fuga1 = intersezioneRette(vertici[0], vertici[1], vertici[3], vertici[2]);
+  const fuga2 = intersezioneRette(vertici[1], vertici[2], vertici[0], vertici[3]);
+  if (!fuga1 || !fuga2) return null;
+  const prodotto = (fuga1[0] - cx) * (fuga2[0] - cx) + (fuga1[1] - cy) * (fuga2[1] - cy);
+  if (prodotto >= 0) return null;
+  return Math.sqrt(-prodotto);
+}
+
+/**
+ * Focale in pixel con la sua incertezza, propagata perturbando i vertici.
+ * `null` quando la vista non la determina — che e' un esito legittimo, non un
+ * errore: significa "questo scatto non serve alla calibrazione, fanne un altro
+ * piu' inclinato".
+ */
+function stimaFocale(vertici, larghezza, altezza, sigmaVertice) {
+  const base = focaleDaVertici(vertici, larghezza, altezza);
+  if (base === null || !isFinite(base) || base <= 0) return null;
+
+  const delta = 0.25;
+  let varianza = 0;
+  for (let i = 0; i < 4; i++) for (let c = 0; c < 2; c++) {
+    const mossi = vertici.map(v => v.slice());
+    mossi[i][c] += delta;
+    const f = focaleDaVertici(mossi, larghezza, altezza);
+    if (f === null) return null;                 // al bordo della degenerazione
+    varianza += (((f - base) / delta) * sigmaVertice) ** 2;
+  }
+  const sigma = Math.sqrt(varianza);
+  return { fPx: base, sigmaPx: sigma, relativa: sigma / base };
+}
+
+/**
+ * Fonde piu' stime della focale: media pesata sull'inverso della varianza, che
+ * per grandezze indipendenti e' la stessa cosa che fa la GLS del core.
+ *
+ * Gli scarti si decidono su criteri **indipendenti dal risultato** (§6.3): una
+ * stima entra o no in base a quanto e' incerta *lei*, mai in base a quanto si
+ * discosta dalle altre. Scartare cio' che disaccorda restringerebbe
+ * l'incertezza in modo artificiale, e il numero finale confermerebbe se stesso.
+ * Gli scarti vengono contati e riportati.
+ */
+function fondiFocali(stime, incertezzaRelativaMassima) {
+  const limite = incertezzaRelativaMassima ?? 0.08;
+  const tenute = [], scartate = [];
+  for (const s of stime) {
+    if (!s) { scartate.push('vista non determinante'); continue; }
+    if (s.relativa > limite) { scartate.push('stima troppo incerta'); continue; }
+    tenute.push(s);
+  }
+  if (!tenute.length) return { fPx: null, tenute: 0, scartate: scartate.length, scartate_motivi: scartate };
+
+  let pesi = 0, somma = 0;
+  for (const s of tenute) {
+    const p = 1 / (s.sigmaPx * s.sigmaPx);
+    pesi += p; somma += p * s.fPx;
+  }
+  const fPx = somma / pesi;
+  const sigmaPx = Math.sqrt(1 / pesi);
+  // dispersione osservata fra le stime: se e' molto maggiore dell'incertezza
+  // dichiarata, il modello sta sottostimando qualcosa (tipicamente la
+  // distorsione, che qui non e' modellata). Si riporta, non si nasconde.
+  const media = fPx;
+  const disp = tenute.length > 1
+    ? Math.sqrt(tenute.reduce((a, s) => a + (s.fPx - media) ** 2, 0) / (tenute.length - 1))
+    : 0;
+  return {
+    fPx, sigmaPx, relativa: sigmaPx / fPx,
+    dispersionePx: disp,
+    coerenza: disp > 0 && sigmaPx > 0 ? disp / (sigmaPx * Math.sqrt(tenute.length)) : 1,
+    tenute: tenute.length, scartate: scartate.length, scartate_motivi: scartate,
+  };
+}
+
+// diagonale del formato 35 mm: serve solo a rendere leggibile il numero
+const DIAGONALE_35MM = 43.27;
+function equivalente35(fPx, larghezza, altezza) {
+  return DIAGONALE_35MM * fPx / Math.hypot(larghezza, altezza);
+}
+
 const API = { rilevaTessere, RAPPORTO_ID1, omografia, applica, misuraSulPiano,
+  focaleDaVertici, stimaFocale, fondiFocali, equivalente35,
   _interni: { aGrigi, sfoca, otsu, maschera, gradiente, contorni,
               semplifica, semplificaChiusa, fitRetta, intersezione, areaPoligono, convesso } };
 

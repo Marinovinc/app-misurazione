@@ -251,3 +251,90 @@ def test_due_rettangoli_compatibili_restano_entrambi_candidati(tmp_path: Path) -
     # entrambi passano il filtro sul rapporto: e' proprio questo a renderli
     # indistinguibili, e il motivo per cui la scelta va dichiarata
     assert all(dev < 0.05 for dev in d["deviazioni"])
+
+
+_BANCO_FOCALE = """
+const R = require(%s);
+// scena fisica: rettangolo ID-1 nello spazio, proiettato con focale NOTA.
+// Se la stima non tornasse, il difetto sarebbe nella formula, non nei dati.
+function proietta({f, rx, ry, rz, tz, W=85.60, H=53.98, larghezza=1200, altezza=800}){
+  const ang=[[-W/2,-H/2,0],[W/2,-H/2,0],[W/2,H/2,0],[-W/2,H/2,0]];
+  const cx=Math.cos(rx), sx=Math.sin(rx), cy=Math.cos(ry), sy=Math.sin(ry);
+  const cz=Math.cos(rz), sz=Math.sin(rz);
+  return ang.map(p=>{
+    let [x,y,z]=p;
+    [y,z]=[y*cx-z*sx, y*sx+z*cx];
+    [x,z]=[x*cy+z*sy, -x*sy+z*cy];
+    [x,y]=[x*cz-y*sz, x*sz+y*cz];
+    const Z=z+tz;
+    return [larghezza/2 + f*x/Z, altezza/2 + f*y/Z];
+  });
+}
+const casi = JSON.parse(process.argv[2]);
+const esiti = casi.map(c => {
+  const v = proietta(c);
+  const s = R.stimaFocale(v, 1200, 800, c.sigma ?? 0.05);
+  return s ? {ok:true, fPx:s.fPx, relativa:s.relativa,
+              eq35:R.equivalente35(s.fPx,1200,800)} : {ok:false};
+});
+// fusione di piu' viste della stessa fotocamera
+const viste = [0.35,0.5,0.28,0.62,0.4].map((rx,i) =>
+  R.stimaFocale(proietta({f:1500, rx, ry:0.2+0.05*i, rz:0.1, tz:400}), 1200, 800, 0.05));
+const fusa = R.fondiFocali(viste);
+// una vista frontale non determina la focale e va scartata, non "aggiustata"
+const frontale = R.stimaFocale(proietta({f:1500, rx:0.001, ry:0.001, rz:0, tz:400}), 1200, 800, 0.05);
+process.stdout.write(JSON.stringify({esiti, fusa, frontaleNulla: frontale === null}));
+"""
+
+CASI_FOCALE: list[dict[str, Any]] = [
+    {"nome": "obiettivo normale, inclinata", "f": 1500, "rx": 0.35, "ry": 0.25, "rz": 0.1, "tz": 400},
+    {"nome": "molto inclinata", "f": 1500, "rx": 0.6, "ry": 0.4, "rz": 0.2, "tz": 400},
+    {"nome": "teleobiettivo", "f": 2600, "rx": 0.5, "ry": 0.35, "rz": 0.1, "tz": 500},
+    {"nome": "grandangolo", "f": 900, "rx": 0.5, "ry": 0.35, "rz": 0.1, "tz": 250},
+]
+
+
+def test_focale_stimata_da_una_sola_vista(tmp_path: Path) -> None:
+    """La focale si ricava dai punti di fuga di un rettangolo di rapporto noto.
+
+    Serve alla terza dimensione (l'altezza di una scatola esce dal piano del
+    riferimento e senza focale non e' ricavabile). **Non** serve alla scala: una
+    fotocamera calibrata da' angoli, non distanze, e il riferimento resta
+    obbligatorio (§3.1).
+    """
+    banco = tmp_path / "focale.cjs"
+    banco.write_text(_BANCO_FOCALE % json.dumps(_RILEVA_JS.as_posix()), encoding="utf-8")
+    completato = subprocess.run(
+        ["node", str(banco), json.dumps(CASI_FOCALE)],
+        capture_output=True, text=True, timeout=60, check=False,
+    )
+    assert completato.returncode == 0, completato.stderr
+    d = json.loads(completato.stdout)
+
+    for caso, e in zip(CASI_FOCALE, d["esiti"], strict=True):
+        assert e["ok"], f"focale non stimata — {caso['nome']}"
+        assert e["fPx"] == pytest.approx(caso["f"], rel=1e-6), caso["nome"]
+
+    fusa = d["fusa"]
+    assert fusa["tenute"] == 5
+    assert fusa["fPx"] == pytest.approx(1500, rel=1e-6)
+    # fondere piu' viste stringe l'incertezza rispetto alla singola
+    assert fusa["relativa"] < min(e["relativa"] for e in d["esiti"] if e["ok"])
+
+
+def test_una_vista_frontale_non_determina_la_focale(tmp_path: Path) -> None:
+    """Vicino alla frontalita' i lati opposti restano paralleli e i punti di
+    fuga scappano all'infinito: la focale **non e' determinabile**.
+
+    Deve uscire un rifiuto, non un numero qualsiasi — e' lo stesso principio del
+    riferimento occluso: meglio dire che non si puo' che produrre un valore
+    dall'aria plausibile.
+    """
+    banco = tmp_path / "focale.cjs"
+    banco.write_text(_BANCO_FOCALE % json.dumps(_RILEVA_JS.as_posix()), encoding="utf-8")
+    completato = subprocess.run(
+        ["node", str(banco), json.dumps(CASI_FOCALE)],
+        capture_output=True, text=True, timeout=60, check=False,
+    )
+    assert completato.returncode == 0, completato.stderr
+    assert json.loads(completato.stdout)["frontaleNulla"] is True
