@@ -246,6 +246,12 @@
   .callout.crit{background:var(--crit-bg);border-color:color-mix(in srgb,var(--crit) 32%,transparent);}
   .callout .ic{color:var(--stripe);font-weight:700;font-family:var(--mono);}
   .refusal{margin:14px 0 2px;font-size:17px;font-weight:600;}
+  .dims{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:18px 0 6px;}
+  .dim .k{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);}
+  .dim .v{font-family:var(--mono);font-size:clamp(24px,5vw,32px);font-weight:600;
+    line-height:1.1;margin-top:3px;font-variant-numeric:tabular-nums;}
+  .dim .v .u{font-size:0.55em;color:var(--accent);}
+  .verifiche{margin-top:14px;}
   .salva{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;
     gap:12px;align-items:center;flex-wrap:wrap;}
   .salva small{color:var(--faint);font-size:12px;flex:1;min-width:200px;}
@@ -265,6 +271,10 @@
       <button class="task" data-go="oggetto">
         <h3>Misura oggetto planare <span class="badge ok">funziona</span></h3>
         <p>Una foto con un riferimento di dimensione nota accanto a un oggetto piatto, e due clic. Usa il nucleo di misura reale, con incertezza, provenienza ed esito.</p>
+      </button>
+      <button class="task" data-go="scatola">
+        <h3>Misura una scatola <span class="badge ok">tre dimensioni</span></h3>
+        <p>Tessera appoggiata sul tavolo accanto alla scatola. Base dal piano rettificato, altezza dalla focale ricavata dalla tessera stessa. Una foto sola.</p>
       </button>
       <button class="task" data-go="corpo">
         <h3>Misure corporee <span class="badge">input manuale</span></h3>
@@ -464,7 +474,8 @@ const $ = s => document.querySelector(s);
 const state = {
   origine:null,               // 'scatto' | 'archivio'
   dataUrl:null, natW:0, natH:0,
-  rifA:[], rifB:[], punti:[],
+  compito:'oggetto',
+  rifA:[], rifB:[], punti:[], base:[], cima:[],
   fase:'rifA',                // 'rifA' -> ('rifB') -> 'target'
   doppio:false,
 };
@@ -512,7 +523,7 @@ chkDoppio.addEventListener('change',()=>{
   // non si ricomincia da capo: i clic gia' fatti sul riferimento A restano, e
   // si prosegue da dove si era. Perdere il lavoro fatto per aver cambiato idea
   // sulla verifica e' il modo piu' rapido di rendere la verifica antipatica.
-  state.fase = state.rifA.length===2 ? (state.doppio?'rifB':'target') : 'rifA';
+  state.fase = state.rifA.length===2 ? (state.doppio?'rifB':sequenza()[state.doppio?2:1]) : 'rifA';
   $('#esito').innerHTML=''; err.hidden=true;
   render(); aggiornaBottone(); aggiornaHint(); aggiornaModo();
 });
@@ -733,13 +744,20 @@ function coordinate(ev){
   return [(ev.clientX-r.left)*state.natW/r.width, (ev.clientY-r.top)*state.natH/r.height];
 }
 function gruppoDi(nome){
-  return nome==='rifA' ? state.rifA : nome==='rifB' ? state.rifB : state.punti;
+  return {rifA:state.rifA, rifB:state.rifB, punti:state.punti,
+          base:state.base, cima:state.cima}[nome] || state.punti;
 }
+function gruppiAttivi(){
+  return state.compito==='scatola' ? ['rifA','rifB','base','cima']
+                                   : ['rifA','rifB','punti'];
+}
+// quanti punti vuole ciascun gruppo: due per un segmento, quattro per una faccia
+function capienza(nome){ return (nome==='base'||nome==='cima') ? 4 : 2; }
 function puntoVicino(p){
   const r=img.getBoundingClientRect();
   const soglia = 22 * state.natW / r.width;    // 22 px sullo schermo, non nell'immagine
   let migliore=null, dMin=soglia;
-  for(const nome of ['rifA','rifB','punti']){
+  for(const nome of gruppiAttivi()){
     gruppoDi(nome).forEach((q,i)=>{
       const d=Math.hypot(q[0]-p[0], q[1]-p[1]);
       if(d<dMin){ dMin=d; migliore={nome,indice:i}; }
@@ -817,12 +835,22 @@ ov.addEventListener('pointerdown',ev=>{
   if(lista.length>=2) lista.length=0;
   lista.push(p);
   segnaManuale(state.fase);
-  if(lista.length===2){
-    if(state.fase==='rifA') state.fase = state.doppio ? 'rifB' : 'target';
-    else if(state.fase==='rifB') state.fase = 'target';
-  }
+  if(lista.length===capienza(state.fase)) avanzaFase();
   render(); aggiornaBottone(); aggiornaHint(); aggiornaModo();
 });
+
+// La sequenza dei passi dipende dal compito: per un oggetto planare bastano
+// riferimento e due estremi, per una scatola servono anche i quattro spigoli di
+// base e i quattro superiori.
+function sequenza(){
+  const s=['rifA'];
+  if(state.doppio) s.push('rifB');
+  return s.concat(state.compito==='scatola' ? ['base','cima'] : ['target']);
+}
+function avanzaFase(){
+  const s=sequenza(), i=s.indexOf(state.fase);
+  if(i>=0 && i<s.length-1) state.fase=s[i+1];
+}
 
 ov.addEventListener('pointermove',ev=>{
   if(!trascinato) return;
@@ -848,26 +876,31 @@ ov.addEventListener('pointercancel',fineTrascinamento);
 reset.addEventListener('click',azzeraPunti);
 
 function azzeraPunti(){
-  state.rifA=[]; state.rifB=[]; state.punti=[]; state.fase='rifA';
+  state.rifA=[]; state.rifB=[]; state.punti=[]; state.base=[]; state.cima=[];
+  state.fase='rifA';
   state.rifAauto=null; state.rifBauto=null; state.rilevate=[];
   $('#esito').innerHTML=''; err.hidden=true;
   render(); aggiornaBottone(); aggiornaHint();
 }
 
 function aggiornaBottone(){
-  const rifPronti = state.rifA.length===2 && (!state.doppio || state.rifB.length===2);
-  btn.disabled = !(state.dataUrl && rifPronti && state.punti.length===2);
+  const completi = sequenza().every(n => gruppoDi(n).length===capienza(n));
+  btn.disabled = !(state.dataUrl && completi);
   // il bottone dice cosa sta per succedere: dove la certificata era possibile e
   // non lo e' piu', non produce un numero ma l'offerta esplicita di degrado
   btn.textContent = richiedeDegrado() ? 'Prosegui in stima…' : 'Misura';
   reset.hidden = !(state.rifA.length || state.rifB.length || state.punti.length);
 
   // un bottone disabilitato senza spiegazione e' un vicolo cieco: dice cosa manca
+  const etichette={rifA:'i 2 clic sul riferimento A', rifB:'i 2 clic sul riferimento B',
+    punti:"i 2 clic sull'oggetto da misurare",
+    base:'i 4 spigoli della <b>base</b>', cima:'i 4 spigoli <b>superiori</b>'};
   const manca=[];
   if(!state.dataUrl) manca.push("un'immagine");
-  if(state.rifA.length<2) manca.push('i 2 clic sul riferimento A');
-  if(state.doppio && state.rifB.length<2) manca.push('i 2 clic sul riferimento B');
-  if(state.punti.length<2) manca.push("i 2 clic sull'oggetto da misurare");
+  for(const n of sequenza()){
+    const g=gruppoDi(n);
+    if(g.length<capienza(n)) manca.push(etichette[n]+(g.length?` (ne mancano ${capienza(n)-g.length})`:''));
+  }
   const nodo=$('#manca');
   nodo.hidden = manca.length===0;
   if(manca.length) nodo.innerHTML='Manca ancora: <b>'+manca.join('</b>, <b>')+'</b>.';
@@ -977,7 +1010,48 @@ function candidatiScartati(){
       +`stroke="${colore('--faint')}" stroke-width="${r*0.25}" stroke-dasharray="${r} ${r}"/>`;
   }).join('');
 }
+// La scatola si disegna come due quadrilateri uniti dagli spigoli verticali:
+// e' l'unico modo di vedere se i quattro punti superiori corrispondono davvero
+// a quelli di base, che e' l'errore piu' facile da fare cliccando otto punti.
+function faccia(punti,col,tratteggio){
+  const r=state.natW*0.006+2;
+  let out='';
+  if(punti.length>=2){
+    const chiusa=punti.length===4;
+    const d=punti.map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ')+(chiusa?' Z':'');
+    out+=`<path d="${d}" fill="${col}" fill-opacity="${chiusa?0.10:0}" stroke="${col}" `
+      +`stroke-width="${r*0.45}"${tratteggio?` stroke-dasharray="${r*1.5} ${r}"`:''}/>`;
+  }
+  punti.forEach((p,i)=>{
+    out+=`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${col}" stroke="#fff" stroke-width="${r*0.35}"/>`;
+    out+=`<text x="${p[0]}" y="${p[1]-r*1.6}" text-anchor="middle" fill="${col}" `
+      +`font-size="${r*2.2}" font-weight="600">${i+1}</text>`;
+  });
+  return out;
+}
+function spigoliVerticali(){
+  const r=state.natW*0.006+2;
+  let out='';
+  const n=Math.min(state.base.length, state.cima.length);
+  for(let i=0;i<n;i++){
+    out+=`<line x1="${state.base[i][0]}" y1="${state.base[i][1]}" `
+      +`x2="${state.cima[i][0]}" y2="${state.cima[i][1]}" stroke="${colore('--faint')}" `
+      +`stroke-width="${r*0.3}" stroke-dasharray="${r*0.8} ${r*0.8}"/>`;
+  }
+  return out;
+}
 function render(){
+  if(state.compito==='scatola'){
+    ov.innerHTML = candidatiScartati()
+                 + quadrilatero(state.rifAauto, colore('--accent'))
+                 + segmento(state.rifA, colore('--accent'), false)
+                 + segmento(state.rifB, colore('--rifb'), false)
+                 + spigoliVerticali()
+                 + faccia(state.base, colore('--warn'), false)
+                 + faccia(state.cima, colore('--good'), true);
+    aggiornaDiagnostica();
+    return;
+  }
   ov.innerHTML = candidatiScartati()
                + quadrilatero(state.rifAauto, colore('--accent'))
                + quadrilatero(state.rifBauto, colore('--rifb'))
@@ -1043,6 +1117,16 @@ function modalitaCorrente(){
 function riga(stato,testo,nota){
   return `<li class="${stato}">${testo}${nota?` <span class="tag">${nota}</span>`:''}</li>`;
 }
+function adattaAlCompito(){
+  const scatola = state.compito==='scatola';
+  document.querySelector('#screen-oggetto h1').textContent =
+    scatola ? 'Misura una scatola' : 'Misura oggetto planare';
+  const sub=document.querySelector('#screen-oggetto .sub');
+  sub.innerHTML = scatola
+    ? 'Tessera appoggiata sul tavolo <b>accanto</b> alla scatola e sullo <b>stesso piano</b>. Base, larghezza e altezza da una foto sola. Ogni valore esce con la sua incertezza.'
+    : "Tutto il calcolo gira su questo dispositivo: nessuna immagine esce, nessuna rete. Il valore esce sempre con la sua incertezza e la sua provenienza — e se la scala non è verificabile non esce nessun numero.";
+}
+
 function aggiornaModo(esito){
   if(!state.origine){ modo.hidden=true; return; }
   modo.hidden=false;
@@ -1134,8 +1218,88 @@ function mostraOffertaDegrado(){
   box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
+// Le tre dimensioni: la base giace sul piano del riferimento e la rettifica la
+// misura; l'altezza esce dal piano e arriva dalla posa piu' la focale, che la
+// tessera stessa fornisce. La verifica di coerenza gira sempre, e il suo esito
+// viaggia col dato — non e' un dettaglio interno.
+// Misurando una scatola la scena e' piena di rettangoli: le sue stesse facce.
+// Se il riferimento riconosciuto cade **dentro** la sagoma cliccata, non e' la
+// tessera — e' una faccia della scatola scambiata per riferimento. La scala che
+// ne uscirebbe e' sbagliata di quanto la faccia differisce da 85,60 mm, cioe'
+// di qualunque cosa, e le proporzioni resterebbero credibili.
+function riferimentoDentroLaScatola(){
+  const t=state.rifAauto;
+  if(!t) return false;
+  const c=t.vertici.reduce((a,v)=>[a[0]+v[0]/4, a[1]+v[1]/4],[0,0]);
+  return (state.base.length===4 && dentroPoligono(c,state.base))
+      || (state.cima.length===4 && dentroPoligono(c,state.cima));
+}
+
+function misuraScatola(){
+  const t=state.rifAauto;
+  if(!t) throw new Error('per la scatola serve la tessera riconosciuta: la sua forma definisce il piano e la focale');
+  if(riferimentoDentroLaScatola()) throw new Error(
+    'il rettangolo riconosciuto come riferimento cade dentro la scatola: quasi '
+    +'certamente è una sua faccia, non la tessera. Tocca la tessera sull’immagine '
+    +'per sceglierla, oppure rifai la foto con la tessera ben visibile accanto alla scatola');
+  const RL=window.MisuraRileva;
+  // corrispondenza vertici<->angoli stabilita dal core: il verso conta
+  const piano=RL.pianoPerTessera(t);
+  const sigmaPunto=parseFloat($('#sigmaseg').value)||1.0;
+  const H=RL.omografia(t.vertici, piano);
+  if(!H) throw new Error('il riferimento non permette di rettificare il piano');
+  const baseP=state.base.map(p=>RL.applica(H,p));
+  if(baseP.some(p=>!p)) throw new Error('base fuori dal piano rettificabile');
+
+  const d=(a,b)=>Math.hypot(b[0]-a[0],b[1]-a[1]);
+  const L=(d(baseP[0],baseP[1])+d(baseP[3],baseP[2]))/2;
+  const W=(d(baseP[1],baseP[2])+d(baseP[0],baseP[3]))/2;
+
+  const alt=[];
+  for(let i=0;i<4;i++){
+    const a=RL.altezzaConIncertezza(t.vertici, piano, baseP[i], state.cima[i],
+      state.natW, state.natH, t.sigmaFitPx, sigmaPunto);
+    if(a) alt.push(a);
+  }
+  if(!alt.length) throw new Error('altezza non ricavabile da questi spigoli');
+  const Hm=alt.reduce((a,b)=>a+b.mm,0)/alt.length;
+  // incertezza dell'altezza: quella propagata, allargata se i quattro spigoli
+  // non concordano — la discordanza e' informazione, non rumore da ignorare
+  const uProp=Math.sqrt(alt.reduce((a,b)=>a+b.sigmaMm*b.sigmaMm,0))/alt.length;
+  const disp=Math.sqrt(alt.reduce((a,b)=>a+(b.mm-Hm)**2,0)/alt.length);
+  const uH=Math.hypot(uProp, disp);
+
+  const verifica=RL.verificaScatola({verticiTessera:t.vertici, pianoTessera:piano,
+    baseImg:state.base, cimaImg:state.cima, larghezza:state.natW, altezza:state.natH,
+    sigmaVertice:t.sigmaFitPx, sigmaPunto});
+
+  // incertezza di L e W: dalla stessa macchina dell'omografia, sui due lati
+  const uL=RL.misuraSulPiano({vertici:t.vertici,lungoDaPrimoVertice:t.lungoDaPrimoVertice},
+    state.base[0], state.base[1], t.sigmaFitPx, sigmaPunto);
+  const uW=RL.misuraSulPiano({vertici:t.vertici,lungoDaPrimoVertice:t.lungoDaPrimoVertice},
+    state.base[1], state.base[2], t.sigmaFitPx, sigmaPunto);
+  return {
+    tipo:'Scatola',
+    dimensioni:[
+      {nome:'Lunghezza', mm:L, u:uL?uL.sigmaMm:null},
+      {nome:'Larghezza', mm:W, u:uW?uW.sigmaMm:null},
+      {nome:'Altezza',   mm:Hm, u:uH},
+    ],
+    verifica, provenienza:"Misurata dall'app", metodo:'omografia',
+    volumeLitri:(L*W*Hm)/1e6,
+  };
+}
+
 btn.addEventListener('click',()=>{
   err.hidden=true;
+  if(state.compito==='scatola'){
+    let e;
+    try{ e=misuraScatola(); }
+    catch(x){ err.hidden=false; err.textContent=x.message||String(x); return; }
+    e.modalita=modalitaCorrente();
+    renderScatola(e); aggiornaModo(e);
+    return;
+  }
   if(richiedeDegrado()){ mostraOffertaDegrado(); return; }
   const tolleranzaMm=parseFloat($('#tolreq').value);
   const sigmaSegPx=parseFloat($('#sigmaseg').value);
@@ -1264,7 +1428,9 @@ function esportaAnnotata(d){
     ctx.fillText((d.motivo||'').slice(0,120), pad*2, y0+riga*1.95);
   } else {
     ctx.fillStyle='#e7eef1'; ctx.font=`600 ${Math.round(riga*1.15)}px ${mono}`;
-    const testo=`${d.valore_mm.toFixed(1)} ± ${d.incertezza_espansa_mm.toFixed(1)} mm`;
+    const testo = d._scatola
+      ? d._scatola.dimensioni.map(x=>`${x.mm.toFixed(0)}±${(2*(x.u||0)).toFixed(0)}`).join(' × ') + ' mm'
+      : `${d.valore_mm.toFixed(1)} ± ${d.incertezza_espansa_mm.toFixed(1)} mm`;
     const largo=ctx.measureText(testo).width;   // misurato col font in uso ora
     ctx.fillText(testo, pad*2, y0+riga*1.25);
     ctx.fillStyle='#8b9aa2'; ctx.font=`${Math.round(riga*0.55)}px ${mono}`;
@@ -1276,6 +1442,9 @@ function esportaAnnotata(d){
       d.metodo==='omografia' ? 'piano rettificato dai 4 vertici' : 'scala da riferimento',
       state.rifAauto ? 'riferimento ID-1 rilevato' : 'riferimento cliccato',
       d.verifica_doppio_riferimento==='superata' ? 'doppio riferimento verificato' : null,
+      d._scatola ? (d._scatola.verifica && d._scatola.verifica.coerente
+        ? 'geometria coerente col piano' : 'geometria NON coerente') : null,
+      d._scatola ? `volume ~${d._scatola.volumeLitri.toFixed(2)} l` : null,
       d.degradata_da ? 'degradata a stima su conferma' : null,
     ].filter(Boolean).join(' · ');
     ctx.fillStyle='#8b9aa2'; ctx.font=`${Math.round(riga*0.55)}px ${mono}`;
@@ -1291,6 +1460,66 @@ function esportaAnnotata(d){
     a.href=URL.createObjectURL(b); a.download=nomeFileMisura();
     a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
   },'image/png');
+}
+
+// Scheda della scatola: tre valori, ciascuno con la sua incertezza accanto —
+// mai un numero secco (§4.3) — piu' l'esito della verifica di coerenza e il
+// limite che quella verifica NON copre.
+function renderScatola(d){
+  const modChip = d.modalita==='certificata'
+    ? '<span class="chip cert">Certificata</span>' : '<span class="chip stima">Stima</span>';
+  const v=d.verifica;
+  const ok = !v || v.coerente;
+  const righe = d.dimensioni.map(x=>
+    `<div class="dim"><div class="k">${x.nome}</div>`
+    +`<div class="v"><b>${x.mm.toFixed(1)}</b> <span class="u">${x.u!=null?'± '+(2*x.u).toFixed(1):''}</span> mm</div></div>`
+  ).join('');
+
+  let h=`<div class="card ${ok?'good':'warn'}">
+    <div class="card-head"><span class="pill ${ok?'good':'warn'}"><span class="dot"></span>
+      ${ok?'Tre dimensioni':'Geometria non coerente'}</span>${modChip}</div>
+    <div class="dims">${righe}</div>
+    <p class="whisper">± è l'incertezza espansa (k=2, ~95%): fa parte del dato, non della schermata.
+      Volume ≈ <b>${d.volumeLitri.toFixed(2)} litri</b>.</p>`;
+
+  if(v){
+    const riga=(nome,e,unita)=>
+      `<li class="${e.superato?'si':'no'}">${nome} <span class="tag">${e.scarto.toFixed(2)} ≤ ${e.soglia.toFixed(2)} ${unita}</span></li>`
+        .replace('≤', e.superato?'≤':'>');
+    h+=`<div class="callout ${ok?'':'crit'}"><span class="ic">${ok?'✓':'!'}</span><span>
+      ${ok ? 'La geometria è coerente con una scatola appoggiata sul piano della tessera.'
+           : v.spiegazione}</span></div>
+      <ul class="cond verifiche">
+        ${riga('Base con angoli retti', v.ortogonalita,'°')}
+        ${riga('Facce sopra la base', v.residuoFacce,'mm')}
+        ${riga('Altezze concordi', v.altezzeConcordi,'mm')}
+      </ul>`;
+  }
+
+  h+=`<div class="callout"><span class="ic">→</span><span><b>Quello che l'app non può verificare:</b>
+    che la scatola sia sullo <b>stesso piano</b> della tessera. Una scatola su un rialzo — anche di
+    pochi millimetri — supera tutti i controlli qui sopra, perché dall'immagine è indistinguibile da
+    una scatola più grande appoggiata sul piano. Questo devi garantirlo tu.</span></div>`;
+
+  h+=`<div class="meta"><div><div class="k">Provenienza</div><div class="v">${d.provenienza}</div></div>
+    <div><div class="k">Metodo</div><div class="v">base dal piano rettificato, altezza dalla posa e dalla focale</div></div></div>`;
+
+  h+=`<div class="salva"><button class="ghost" id="salvaImg">⤓ Salva immagine annotata</button>
+    <small>Le tre dimensioni, le incertezze e l'esito della verifica finiscono <b>dentro</b> il file.</small></div></div>`;
+
+  const box=$('#esito');
+  box.innerHTML=h;
+  const b=$('#salvaImg');
+  if(b) b.addEventListener('click',()=>esportaScatola(d));
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function esportaScatola(d){
+  const finto={tipo:'EntroTolleranza',
+    valore_mm:d.dimensioni[0].mm, incertezza_espansa_mm:2*(d.dimensioni[0].u||0),
+    provenienza:d.provenienza, modalita:d.modalita, metodo:d.metodo,
+    _scatola:d};
+  esportaAnnotata(finto);
 }
 
 function gauge(U,T){ const m=Math.max(T,U)*1.3; return {b:50-T/m*50, u:50-U/m*50}; }
@@ -1341,9 +1570,9 @@ function renderEsito(d){
 }
 
 // --- router a hash + navigazione tra schermi ---
-const schermi={home:'screen-home',oggetto:'screen-oggetto',corpo:'screen-corpo'};
+const schermi={home:'screen-home',oggetto:'screen-oggetto',scatola:'screen-oggetto',corpo:'screen-corpo'};
 const navback=$('#navback'), navtitle=$('#navtitle');
-const titoli={home:'app-misurazione',oggetto:'Misura oggetto',corpo:'Misure corporee'};
+const titoli={home:'app-misurazione',oggetto:'Misura oggetto',scatola:'Misura scatola',corpo:'Misure corporee'};
 function vai(nome){ location.hash = nome==='home' ? '' : '#/'+nome; }
 function mostra(){
   const richiesto=(location.hash.replace('#/','')||'home');
@@ -1351,6 +1580,10 @@ function mostra(){
   Object.entries(schermi).forEach(([k,id])=>{ document.getElementById(id).hidden=(k!==attivo); });
   navback.hidden=(attivo==='home');
   navtitle.textContent=titoli[attivo];
+  if(attivo==='oggetto'||attivo==='scatola'){
+    if(state.compito!==attivo){ state.compito=attivo; azzeraPunti(); }
+    adattaAlCompito();
+  }
   window.scrollTo(0,0);
 }
 window.addEventListener('hashchange',mostra);

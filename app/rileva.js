@@ -551,6 +551,41 @@ function pianoTessera(lungoDaPrimoVertice) {
     : [[0, 0], [C, 0], [C, L], [0, L]];
 }
 
+function areaConSegno(p) {
+  let s = 0;
+  for (let i = 0; i < p.length; i++) {
+    const q = p[(i + 1) % p.length];
+    s += p[i][0] * q[1] - q[0] * p[i][1];
+  }
+  return s / 2;
+}
+
+/**
+ * Angoli del piano nell'ordine che **corrisponde** ai vertici rilevati.
+ *
+ * Il rilevatore restituisce i quattro vertici in ordine ciclico, ma il verso di
+ * percorrenza dipende da come il contorno e' stato tracciato: accoppiarli a un
+ * rettangolo scritto a mano produce un'omografia che manda ogni angolo su
+ * quello sbagliato. Per le sole distanze l'effetto e' mascherato — una
+ * riflessione le conserva — ma la **posa** ne esce con la normale rovesciata, e
+ * le altezze diventano negative. Qui il verso del piano viene allineato a
+ * quello dell'immagine.
+ */
+function pianoPerTessera(candidato) {
+  const piano = pianoTessera(candidato.lungoDaPrimoVertice !== false);
+  const versoImmagine = Math.sign(areaConSegno(candidato.vertici));
+  const versoPiano = Math.sign(areaConSegno(piano));
+  if (versoImmagine !== 0 && versoImmagine !== versoPiano) {
+    // Si **specchia** il rettangolo, non si inverte l'ordine dei vertici:
+    // ruotare la sequenza cambierebbe anche quale lato del piano corrisponde al
+    // primo lato in immagine, scambiando 85,60 con 53,98. L'errore che ne segue
+    // e' subdolo, perche' le proporzioni restano credibili — le dimensioni
+    // escono divise e moltiplicate per 1,586, e il volume resta plausibile.
+    return piano.map(p => [p[0], -p[1]]);
+  }
+  return piano;
+}
+
 /**
  * Lunghezza in mm di un segmento che giace sul piano della tessera, con la sua
  * incertezza propagata numericamente: si perturba ogni coordinata d'ingresso
@@ -558,7 +593,7 @@ function pianoTessera(lungoDaPrimoVertice) {
  * jacobiano calcolato per differenze finite, non una stima a occhio.
  */
 function misuraSulPiano(tessera, a, b, sigmaVertice, sigmaPunto) {
-  const piano = pianoTessera(tessera.lungoDaPrimoVertice !== false);
+  const piano = pianoPerTessera(tessera);
   const lunghezza = (vertici, pa, pb) => {
     const h = omografia(vertici, piano);
     if (!h) return null;
@@ -967,7 +1002,7 @@ function equivalente35(fPx, larghezza, altezza) {
 }
 
 const API = { rilevaTessere, RAPPORTO_ID1, omografia, applica, misuraSulPiano,
-  focaleDaVertici, stimaFocale, fondiFocali, equivalente35,
+  focaleDaVertici, stimaFocale, fondiFocali, equivalente35, pianoPerTessera,
   posaDaOmografia, altezzaSulPiano, altezzaConIncertezza, verificaScatola,
   _interni: { aGrigi, sfoca, otsu, maschera, gradiente, contorni,
               semplifica, semplificaChiusa, fitRetta, intersezione, areaPoligono, convesso } };
