@@ -4,7 +4,7 @@
 // Il nome della cache E' la versione: va cambiato a ogni rilascio, altrimenti il
 // browser continua a servire la versione precedente e il deploy non arriva mai
 // all'utente.
-const CACHE = 'misura-v9';
+const CACHE = 'misura-v10';
 const ASSET = ['/', '/core.js', '/rileva.js', '/manifest.webmanifest', '/icon-512.png'];
 
 self.addEventListener('install', e => {

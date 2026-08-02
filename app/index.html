@@ -137,7 +137,14 @@
   .stage.show{display:block;}
   .imgwrap{position:relative;display:inline-block;line-height:0;max-width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--line);}
   .imgwrap img{display:block;max-width:100%;max-height:min(58vh,520px);width:auto;height:auto;}
-  .imgwrap svg{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;}
+  .imgwrap svg{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:none;}
+  /* lente: il dito copre il punto che sta posizionando, e a mano libera un
+     pixel non si becca. Ingrandisce la zona sotto il cursore col mirino. */
+  .lente{position:absolute;width:132px;height:132px;border-radius:50%;pointer-events:none;
+    border:2px solid var(--accent);box-shadow:0 4px 18px rgba(0,0,0,.35);background:var(--surface);z-index:3;
+    image-rendering:pixelated;}
+  .lente[hidden]{display:none;}
+  .lente.destra{right:10px;top:10px;} .lente.sinistra{left:10px;top:10px;}
   .hint{font-size:12.5px;color:var(--muted);margin:10px 2px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .tag{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid var(--line);background:var(--surface-2);color:var(--accent-ink);}
 
@@ -292,7 +299,7 @@
         <br>Stessa procedura su un <b>oggetto diverso</b> (segmento viola). L'app ricava una seconda scala e la confronta con la prima: se concordano le fonde e <b>l'incertezza scende</b>; se non concordano sa che uno dei due è sbagliato — ma non quale — e <b>non ti dà nessun numero</b>. Con un solo riferimento quell'errore resterebbe invisibile.
         <br>È la condizione per la modalità certificata. Se ne hai uno solo, usa <i>ne ho uno solo</i> e prosegui in stima.</li>
 
-      <li><b>Oggetto.</b> Clicca i due estremi della misura che ti serve (segmento arancione). Dev'essere sul piano del riferimento.</li>
+      <li><b>Oggetto.</b> Clicca i due estremi della misura che ti serve (segmento arancione). Dev'essere sul piano del riferimento.<br>Ogni punto, anche quelli del riferimento, si può <b>trascinare</b> per aggiustarlo: compare una lente ingrandita col mirino, e se una misura era già a schermo si rifà da sola.</li>
 
       <li><b>Misura.</b> Leggi <b>valore ± incertezza</b> e l'esito: entro tolleranza, fuori tolleranza, oppure non misurabile. L'incertezza è espansa a k=2, cioè circa il 95%: fa parte del dato, non della schermata.</li>
     </ol>
@@ -359,7 +366,7 @@
           <button class="ghost" id="oraAzione" hidden></button>
         </div>
         <div class="stage" id="stage">
-          <div class="imgwrap"><img id="img" alt="immagine acquisita"><svg id="ov" preserveAspectRatio="xMidYMid meet"></svg></div>
+          <div class="imgwrap"><img id="img" alt="immagine acquisita"><svg id="ov" preserveAspectRatio="xMidYMid meet"></svg><canvas id="lente" class="lente" hidden></canvas></div>
         </div>
         <div class="hint" id="hint" hidden></div>
         <div class="diag" id="diag" hidden></div>
@@ -706,23 +713,105 @@ function rilevaAutomatico(){
   }catch(e){ /* il rilevamento e' un aiuto: se fallisce restano i clic */ }
 }
 
-ov.addEventListener('click',ev=>{
-  if(!state.dataUrl) return;
+// --- posizionamento dei punti: clic, trascinamento, lente ---------------------
+// Pointer events invece di click: gli stessi gestori valgono per mouse, dito e
+// pennino. Con l'omografia attiva il termine dominante dell'incertezza sono
+// ormai i clic sull'oggetto, quindi poterli **aggiustare** conta piu' che
+// poterli mettere in fretta: ogni punto e' trascinabile, e non si ricomincia da
+// capo per un pixel storto.
+const lente=$('#lente');
+let trascinato=null;
+
+function coordinate(ev){
   const r=img.getBoundingClientRect();
-  const p=[(ev.clientX-r.left)*state.natW/r.width,(ev.clientY-r.top)*state.natH/r.height];
-  const lista = state.fase==='rifA' ? state.rifA : state.fase==='rifB' ? state.rifB : state.punti;
+  return [(ev.clientX-r.left)*state.natW/r.width, (ev.clientY-r.top)*state.natH/r.height];
+}
+function gruppoDi(nome){
+  return nome==='rifA' ? state.rifA : nome==='rifB' ? state.rifB : state.punti;
+}
+function puntoVicino(p){
+  const r=img.getBoundingClientRect();
+  const soglia = 22 * state.natW / r.width;    // 22 px sullo schermo, non nell'immagine
+  let migliore=null, dMin=soglia;
+  for(const nome of ['rifA','rifB','punti']){
+    gruppoDi(nome).forEach((q,i)=>{
+      const d=Math.hypot(q[0]-p[0], q[1]-p[1]);
+      if(d<dMin){ dMin=d; migliore={nome,indice:i}; }
+    });
+  }
+  return migliore;
+}
+
+const INGRANDIMENTO=5, LATO_LENTE=132;
+function mostraLente(p){
+  if(!state.dataUrl) return;
+  const l=LATO_LENTE/INGRANDIMENTO;
+  lente.width=LATO_LENTE; lente.height=LATO_LENTE;
+  const ctx=lente.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  ctx.fillStyle=colore('--surface-2'); ctx.fillRect(0,0,LATO_LENTE,LATO_LENTE);
+  ctx.drawImage(img, p[0]-l/2, p[1]-l/2, l, l, 0, 0, LATO_LENTE, LATO_LENTE);
+  const m=LATO_LENTE/2;
+  ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(m,0); ctx.lineTo(m,LATO_LENTE); ctx.moveTo(0,m); ctx.lineTo(LATO_LENTE,m); ctx.stroke();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(m,0); ctx.lineTo(m,LATO_LENTE); ctx.moveTo(0,m); ctx.lineTo(LATO_LENTE,m); ctx.stroke();
+  // la lente si mette dalla parte opposta al punto, per non coprirlo
+  lente.classList.toggle('destra', p[0] < state.natW/2);
+  lente.classList.toggle('sinistra', p[0] >= state.natW/2);
+  lente.hidden=false;
+}
+function nascondiLente(){ lente.hidden=true; }
+
+// Spostare a mano un riferimento rilevato ne cambia la provenienza: da quel
+// momento e' un punto cliccato, con la sigma del clic e senza omografia.
+function segnaManuale(nome){
+  if(nome==='rifA') state.rifAauto=null;
+  if(nome==='rifB') state.rifBauto=null;
+}
+
+ov.addEventListener('pointerdown',ev=>{
+  if(!state.dataUrl) return;
+  ev.preventDefault();
+  const p=coordinate(ev);
+  const esistente=puntoVicino(p);
+  if(esistente){
+    trascinato=esistente;
+    ov.setPointerCapture(ev.pointerId);
+    mostraLente(gruppoDi(esistente.nome)[esistente.indice]);
+    return;
+  }
+  const lista=gruppoDi(state.fase);
   if(lista.length>=2) lista.length=0;
   lista.push(p);
-  // un clic sul riferimento sostituisce il rilevamento: da quel momento la
-  // provenienza di quel riferimento e' manuale, con la sigma del clic
-  if(state.fase==='rifA') state.rifAauto=null;
-  if(state.fase==='rifB') state.rifBauto=null;
+  segnaManuale(state.fase);
   if(lista.length===2){
     if(state.fase==='rifA') state.fase = state.doppio ? 'rifB' : 'target';
     else if(state.fase==='rifB') state.fase = 'target';
   }
   render(); aggiornaBottone(); aggiornaHint(); aggiornaModo();
 });
+
+ov.addEventListener('pointermove',ev=>{
+  if(!trascinato) return;
+  ev.preventDefault();
+  const p=coordinate(ev);
+  gruppoDi(trascinato.nome)[trascinato.indice]=p;
+  segnaManuale(trascinato.nome);
+  render(); mostraLente(p);
+});
+
+function fineTrascinamento(){
+  if(!trascinato) return;
+  trascinato=null; nascondiLente();
+  render(); aggiornaBottone(); aggiornaHint(); aggiornaModo();
+  // se una misura era gia' sullo schermo va rifatta: lasciarla ferma mentre i
+  // punti si sono spostati significa mostrare un numero che non descrive piu'
+  // quello che si vede
+  if($('#esito').querySelector('.card') && !btn.disabled) btn.click();
+}
+ov.addEventListener('pointerup',fineTrascinamento);
+ov.addEventListener('pointercancel',fineTrascinamento);
 
 reset.addEventListener('click',azzeraPunti);
 
@@ -807,7 +896,7 @@ function aggiornaHint(){
     oraS.textContent='La misura che ti serve, sullo stesso piano del riferimento. Poi premi il bottone in fondo.';
     if(state.punti.length===2){
       oraT.textContent='Tutto pronto: premi Misura';
-      oraS.textContent='Puoi ancora correggere qualsiasi punto ricliccando, o azzerare tutto.';
+      oraS.textContent='Puoi trascinare qualsiasi punto per aggiustarlo: compare una lente e la misura si rifà da sola.';
     }
   }
 }
